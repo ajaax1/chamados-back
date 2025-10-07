@@ -11,11 +11,10 @@ use GuzzleHttp\Client;
 
 class AuthController extends Controller
 {
-    // LOGIN COM CAPTCHA
     public function login(Request $request)
     {
         $data = $request->validate([
-            'email' => 'required|email',
+            'email' => 'required',
             'password' => 'required|string',
         ],
         [
