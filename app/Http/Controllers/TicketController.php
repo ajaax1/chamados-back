@@ -27,6 +27,7 @@ class TicketController extends Controller
     {
         $data = $request->validate(
             [
+                'title' => 'required|string|max:250',
                 'nome_cliente' => 'required|string|max:100',
                 'whatsapp_numero' => 'nullable|string|max:20',
                 'descricao' => 'required|string',

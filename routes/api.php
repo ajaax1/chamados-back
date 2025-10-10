@@ -23,21 +23,19 @@ Route::post('webhook/whatsapp', [WhatsappWebhookController::class, 'receive']);
 */
 Route::middleware('auth:sanctum')->group(function () {
 
-    // Logout
     Route::post('logout', [AuthController::class, 'logout']);
 
-    // Perfil do usuário logado
     Route::get('me', [UserController::class, 'me']);
     Route::put('me', [UserController::class, 'updateProfile']);
 
-    // Usuários (somente admin)
     Route::apiResource('users', UserController::class)
         ->middleware('can:manage-users');
 
-    // Chamados
+    Route::get('users-list', [UserController::class, 'list']);
     Route::apiResource('tickets', TicketController::class);
     Route::get('ticket/{id}', [TicketController::class, 'show']);
-    // Mensagens de um chamado
+    Route::get('tickets-filtro/{search?}/{status?}/{userId?}/{priority?}', [TicketController::class, 'index']);
+
     Route::get('tickets/{ticket}/messages', [MessageController::class, 'index']);
     Route::post('tickets/{ticket}/messages', [MessageController::class, 'store']);
 });

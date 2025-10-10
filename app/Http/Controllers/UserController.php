@@ -63,4 +63,10 @@ class UserController extends Controller
         $user->update($request->only('nome','email'));
         return $user;
     }
+
+    public function list()
+    {
+        $users = User::select('id', 'name')->get();
+        return response()->json($users);
+    }
 }
