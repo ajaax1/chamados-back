@@ -7,22 +7,34 @@ use App\Models\Ticket;
 
 class TicketController extends Controller
 {
-    // LISTAR COM FILTROS
     public function index(Request $request)
     {
         $query = Ticket::query();
 
-        if ($request->filled('q')) $query->search($request->q);
-        if ($request->filled('status')) $query->where('status', $request->status);
-        if ($request->filled('user_id')) $query->where('user_id', $request->user_id);
-        if ($request->filled('from') && $request->filled('to')) {
-            $query->whereBetween('created_at', [$request->from, $request->to]);
+        if ($search = $request->query('search')) {
+            $query->where('title', 'like', "%{$search}%");
         }
 
-        return $query->with('user')->paginate(15);
+        if ($status = $request->query('status')) {
+            $query->where('status', $status);
+        }
+
+        if ($userId = $request->query('user_id')) {
+            $query->where('user_id', $userId);
+        }
+
+        if ($priority = $request->query('priority')) {
+            $query->where('priority', $priority);
+        }
+
+        if ($request->filled('from') && $request->filled('to')) {
+            $query->whereBetween('created_at', [$request->query('from'), $request->query('to')]);
+        }
+
+        return $query->with('user')->paginate(3);
     }
 
-    // CRIAR CHAMADO MANUAL
+
     public function store(Request $request)
     {
         $data = $request->validate(
@@ -32,6 +44,7 @@ class TicketController extends Controller
                 'whatsapp_numero' => 'nullable|string|max:20',
                 'descricao' => 'required|string',
                 'status' => 'required|nullable|in:aberto,pendente,resolvido,finalizado',
+                'priority' => 'required|in:baixa,média,alta',
             ],
             [
                 'nome_cliente.required' => 'O nome do cliente é obrigatório.',
@@ -39,6 +52,8 @@ class TicketController extends Controller
                 'status.in' => 'O status deve ser um dos seguintes: aberto, pendente, resolvido, finalizado.',
                 'whatsapp_numero.max' => 'O número de WhatsApp não pode exceder 20 caracteres.',
                 'status.required' => 'O status é obrigatório.',
+                'title.required' => 'O título do chamado é obrigatório.',
+                'priority.in' => 'A prioridade deve ser um dos seguintes: baixa, média, alta.',
             ]
         );
 
