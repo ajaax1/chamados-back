@@ -31,7 +31,7 @@ Route::middleware('auth:sanctum')->group(function () {
     Route::apiResource('users', UserController::class)
         ->middleware('can:manage-users');
 
-    Route::get('users-list', [UserController::class, 'list']);
+    Route::get('users-alphabetical', [UserController::class, 'getAllAlphabetical']);
     Route::apiResource('tickets', TicketController::class);
     Route::get('ticket/{id}', [TicketController::class, 'show']);
     Route::get('tickets-filtro', [TicketController::class, 'index']);

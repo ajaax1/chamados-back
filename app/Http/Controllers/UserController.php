@@ -69,4 +69,11 @@ class UserController extends Controller
         $users = User::select('id', 'name')->get();
         return response()->json($users);
     }
+
+    // BUSCAR TODOS OS USUÁRIOS EM ORDEM ALFABÉTICA
+    public function getAllAlphabetical()
+    {
+        $users = User::orderBy('name', 'asc')->get();
+        return response()->json($users);
+    }
 }
