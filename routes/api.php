@@ -35,7 +35,9 @@ Route::middleware('auth:sanctum')->group(function () {
     Route::apiResource('tickets', TicketController::class);
     Route::get('ticket/{id}', [TicketController::class, 'show']);
     Route::get('tickets-filtro', [TicketController::class, 'index']);
+    Route::get('tickets-stats', [TicketController::class, 'stats']);
 
     Route::get('tickets/{ticket}/messages', [MessageController::class, 'index']);
     Route::post('tickets/{ticket}/messages', [MessageController::class, 'store']);
+
 });

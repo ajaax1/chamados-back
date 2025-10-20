@@ -31,7 +31,9 @@ class TicketController extends Controller
             $query->whereBetween('created_at', [$request->query('from'), $request->query('to')]);
         }
 
-        return $query->with('user')->paginate(3);
+        $query->orderBy('created_at', 'desc');
+
+        return $query->with('user')->paginate(10);
     }
 
 
@@ -68,19 +70,21 @@ class TicketController extends Controller
         return $ticket->load('user', 'messages');
     }
 
-    // ATUALIZAR
     public function update(Request $request, int $id)
     {
         $data = $request->validate(
             [
-                'nome_cliente' => 'sometimes|string|max:100',
+                'title' => 'string|max:250',
+                'nome_cliente' => 'string|max:100',
                 'whatsapp_numero' => 'nullable|string|max:20',
-                'descricao' => 'sometimes|string',
-                'status' => 'sometimes|nullable|in:aberto,pendente,resolvido,finalizado',
+                'descricao' => 'string',
+                'status' => 'nullable|in:aberto,pendente,resolvido,finalizado',
+                'priority' => 'in:baixa,média,alta',
             ],
             [
                 'status.in' => 'O status deve ser um dos seguintes: aberto, pendente, resolvido, finalizado.',
                 'whatsapp_numero.max' => 'O número de WhatsApp não pode exceder 20 caracteres.',
+                'priority.in' => 'A prioridade deve ser um dos seguintes: baixa, média, alta.',
             ]
         );
         $ticket = Ticket::find($id);
@@ -88,18 +92,33 @@ class TicketController extends Controller
             return response()->json(['message' => 'Chamado não encontrado'], 404);
         }
 
-        $ticket->update($data);
+        $ticket->fill($data);
+        $ticket->save();
 
-        // Recarrega o ticket atualizado do banco
-        $updatedTicket = Ticket::find($id);
-
-        return response()->json($updatedTicket, 200);
+        return response()->json($ticket->fresh(), 200);
     }
+
 
     // DELETAR
     public function destroy(Ticket $ticket)
     {
         $ticket->delete();
         return response()->json(['message' => 'Chamado excluído']);
+    }
+
+    // ESTATÍSTICAS DOS TICKETS
+    public function stats()
+    {
+        $total = Ticket::count();
+        $abertos = Ticket::where('status', 'aberto')->count();
+        $resolvidos = Ticket::where('status', 'resolvido')->count();
+        $pendentes = Ticket::where('status', 'pendente')->count();
+
+        return response()->json([
+            'total' => $total,
+            'abertos' => $abertos,
+            'resolvidos' => $resolvidos,
+            'pendentes' => $pendentes
+        ]);
     }
 }
