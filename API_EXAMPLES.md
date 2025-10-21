@@ -249,3 +249,4 @@ methods: {
 2. **Use o token de autenticação** em todas as requisições
 3. **Trate erros adequadamente** para melhor experiência do usuário
 4. **Recarregue a lista** após deletar um ticket
+

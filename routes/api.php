@@ -28,15 +28,30 @@ Route::middleware('auth:sanctum')->group(function () {
     Route::get('me', [UserController::class, 'me']);
     Route::put('me', [UserController::class, 'updateProfile']);
 
-    Route::apiResource('users', UserController::class)
-        ->middleware('can:manage-users');
+    // User management - Admin can manage all users, others can only manage themselves
+    Route::get('users', [UserController::class, 'index']);
+    Route::post('users', [UserController::class, 'store'])
+        ->middleware('role:admin');
+    Route::get('users/{user}', [UserController::class, 'show']);
+    Route::put('users/{user}', [UserController::class, 'update']);
+    Route::delete('users/{user}', [UserController::class, 'destroy'])
+        ->middleware('role:admin');
 
     Route::get('users-alphabetical', [UserController::class, 'getAllAlphabetical']);
-    Route::apiResource('tickets', TicketController::class);
-    Route::get('ticket/{id}', [TicketController::class, 'show']);
+
+    // Ticket routes with role-based permissions
     Route::get('tickets-filtro', [TicketController::class, 'index']);
     Route::get('tickets-stats', [TicketController::class, 'stats']);
+    Route::get('ticket/{id}', [TicketController::class, 'show']);
 
+    Route::post('tickets', [TicketController::class, 'store']);
+
+    Route::put('tickets/{ticket}', [TicketController::class, 'update']);
+
+    Route::delete('tickets/{ticket}', [TicketController::class, 'destroy'])
+        ->middleware('role:support');
+
+    // Messages - All roles can view and create
     Route::get('tickets/{ticket}/messages', [MessageController::class, 'index']);
     Route::post('tickets/{ticket}/messages', [MessageController::class, 'store']);
 

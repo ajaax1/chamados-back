@@ -65,13 +65,24 @@ class TicketController extends Controller
     }
 
     // VISUALIZAR
-    public function show(Ticket $ticket)
+    public function show($id)
     {
-        return $ticket->load('user', 'messages');
+        $ticket = Ticket::find($id);
+        if (!$ticket) {
+            return response()->json(['message' => 'Chamado não encontrado'], 404);
+        }
+        return response()->json($ticket->load('user', 'messages'));
     }
 
     public function update(Request $request, int $id)
     {
+        $user = $request->user();
+        $ticket = Ticket::find($id);
+
+        if (!$ticket) {
+            return response()->json(['message' => 'Chamado não encontrado'], 404);
+        }
+
         $data = $request->validate(
             [
                 'title' => 'string|max:250',
@@ -80,17 +91,15 @@ class TicketController extends Controller
                 'descricao' => 'string',
                 'status' => 'nullable|in:aberto,pendente,resolvido,finalizado',
                 'priority' => 'in:baixa,média,alta',
+                'user_id' => 'nullable|exists:users,id',
             ],
             [
                 'status.in' => 'O status deve ser um dos seguintes: aberto, pendente, resolvido, finalizado.',
                 'whatsapp_numero.max' => 'O número de WhatsApp não pode exceder 20 caracteres.',
                 'priority.in' => 'A prioridade deve ser um dos seguintes: baixa, média, alta.',
+                'user_id.exists' => 'O usuário não existe.',
             ]
         );
-        $ticket = Ticket::find($id);
-        if (!$ticket) {
-            return response()->json(['message' => 'Chamado não encontrado'], 404);
-        }
 
         $ticket->fill($data);
         $ticket->save();
@@ -100,8 +109,15 @@ class TicketController extends Controller
 
 
     // DELETAR
-    public function destroy(Ticket $ticket)
+    public function destroy(Request $request, Ticket $ticket)
     {
+        $user = $request->user();
+
+        // Check if user can delete this ticket
+        if (!$user->canDeleteTickets() && $ticket->user_id !== $user->id) {
+            return response()->json(['message' => 'Access denied. You can only delete your own tickets.'], 403);
+        }
+
         $ticket->delete();
         return response()->json(['message' => 'Chamado excluído']);
     }

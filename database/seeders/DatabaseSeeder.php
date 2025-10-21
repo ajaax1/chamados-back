@@ -18,6 +18,7 @@ class DatabaseSeeder extends Seeder
             'name' => 'Ruan Higor Silva',
             'email' => 'ruanhigor123@gmail.com',
             'password'=> bcrypt('ajax1233253'),
+            'role' => 'admin',
         ]);
     }
 }

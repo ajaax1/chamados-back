@@ -11,27 +11,69 @@ class User extends Authenticatable
 {
     use HasApiTokens, Notifiable , HasFactory;
 
-    protected $fillable = ['nome', 'email', 'password', 'role'];
+    protected $fillable = ['name', 'email', 'password', 'role'];
 
     protected $hidden = ['password', 'remember_token'];
+
+    protected $casts = [
+        'email_verified_at' => 'datetime',
+        'password' => 'hashed',
+    ];
 
     public function tickets()
     {
         return $this->hasMany(Ticket::class);
     }
 
+    // Role checking methods
     public function isAdmin()
     {
         return $this->role === 'admin';
     }
 
-    public function isSuporte()
+    public function isSupport()
     {
-        return $this->role === 'suporte';
+        return $this->role === 'support';
     }
 
-    public function isAssistente()
+    public function isAssistant()
     {
-        return $this->role === 'assistente';
+        return $this->role === 'assistant';
+    }
+
+    // Permission checking methods
+    public function canManageUsers()
+    {
+        return $this->isAdmin();
+    }
+
+    public function canDeleteTickets()
+    {
+        return $this->isAdmin() || $this->isSupport();
+    }
+
+    public function canCreateTickets()
+    {
+        return true; // All roles can create tickets
+    }
+
+    public function canRespondTickets()
+    {
+        return true; // All roles can respond to tickets
+    }
+
+    public function canEditTickets()
+    {
+        return $this->isAdmin() || $this->isSupport();
+    }
+
+    public function canViewAllTickets()
+    {
+        return $this->isAdmin() || $this->isSupport();
+    }
+
+    public function canViewOwnTickets()
+    {
+        return true; // All roles can view their own tickets
     }
 }
