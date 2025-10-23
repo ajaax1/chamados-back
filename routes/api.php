@@ -6,6 +6,7 @@ use App\Http\Controllers\UserController;
 use App\Http\Controllers\TicketController;
 use App\Http\Controllers\MessageController;
 use App\Http\Controllers\WhatsappWebhookController;
+use App\Http\Controllers\PasswordResetController;
 
 /*
 |--------------------------------------------------------------------------
@@ -14,6 +15,12 @@ use App\Http\Controllers\WhatsappWebhookController;
 */
 Route::post('login', [AuthController::class, 'login']);
 Route::post('password/forgot', [AuthController::class, 'forgot']);
+
+// Password Reset Routes
+Route::post('password/forgot', [PasswordResetController::class, 'forgotPassword']);
+Route::get('password/verify-token', [PasswordResetController::class, 'verifyToken']);
+Route::post('password/reset', [PasswordResetController::class, 'resetPassword']);
+
 Route::post('webhook/whatsapp', [WhatsappWebhookController::class, 'receive']);
 
 /*
@@ -27,6 +34,9 @@ Route::middleware('auth:sanctum')->group(function () {
 
     Route::get('me', [UserController::class, 'me']);
     Route::put('me', [UserController::class, 'updateProfile']);
+
+    // Change password (authenticated user)
+    Route::post('password/change', [PasswordResetController::class, 'changePassword']);
 
     // User management - Admin can manage all users, others can only manage themselves
     Route::get('users', [UserController::class, 'index']);
