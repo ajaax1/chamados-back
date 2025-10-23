@@ -40,6 +40,7 @@ Route::middleware('auth:sanctum')->group(function () {
 
     // User management - Admin can manage all users, others can only manage themselves
     Route::get('users', [UserController::class, 'index']);
+    Route::get('users-stats', [UserController::class, 'stats']);
     Route::post('users', [UserController::class, 'store'])
         ->middleware('role:admin');
     Route::get('users/{user}', [UserController::class, 'show']);

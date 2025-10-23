@@ -106,7 +106,7 @@ class UserController extends Controller
         $user = User::find($id);
         if (!$user) {
             return response()->json(['message' => 'Usuário não encontrado'], 404);
-        }   
+        }
         $user->delete();
         return response()->json(['message' => 'Usuário deletado']);
     }
@@ -144,5 +144,20 @@ class UserController extends Controller
     {
         $users = User::orderBy('name', 'asc')->get();
         return response()->json($users);
+    }
+
+    public function stats()
+    {
+        $total = User::count();
+        $admins = User::where('role', 'admin')->count();
+        $support = User::where('role', 'support')->count();
+        $assistant = User::where('role', 'assistant')->count();
+
+        return response()->json([
+            'total' => $total,
+            'admins' => $admins,
+            'support' => $support,
+            'assistant' => $assistant
+        ]);
     }
 }
