@@ -45,7 +45,7 @@ class PasswordResetController extends Controller
         ]);
 
         // Criar link de reset para o frontend
-        $frontendUrl = env('FRONTEND_URL', 'http://localhost:3000');
+        $frontendUrl = env('FRONTEND_URL', 'https://tickets-zap.vercel.app');
         $resetLink = $frontendUrl . "/reset-password?token={$token}&email=" . urlencode($data['email']);
 
         // Enviar email
