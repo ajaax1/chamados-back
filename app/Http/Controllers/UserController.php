@@ -37,7 +37,7 @@ class UserController extends Controller
                 'name' => 'required|string|max:100',
                 'email' => 'required|email|unique:users',
                 'password' => 'required|min:6',
-                'role' => 'required|in:admin,support,assistant'
+                'role' => 'required|in:admin,support,assistant,cliente'
             ],
             [
                 'name.required' => 'O nome é obrigatório.',
@@ -47,7 +47,7 @@ class UserController extends Controller
                 'password.required' => 'A senha é obrigatória.',
                 'password.min' => 'A senha deve ter pelo menos 6 caracteres.',
                 'role.required' => 'A função é obrigatória.',
-                'role.in' => 'A função deve ser um dos seguintes: admin, support, assistant.',
+                'role.in' => 'A função deve ser um dos seguintes: admin, support, assistant, cliente.',
             ]
         );
 
@@ -73,7 +73,7 @@ class UserController extends Controller
 
         // Apenas admin pode alterar role
         if ($currentUser->canManageUsers()) {
-            $validationRules['role'] = 'sometimes|in:admin,support,assistant';
+            $validationRules['role'] = 'sometimes|in:admin,support,assistant,cliente';
         }
 
         $data = $request->validate(
@@ -82,7 +82,7 @@ class UserController extends Controller
                 'name.max' => 'O nome não pode ter mais de 100 caracteres.',
                 'email.email' => 'O email deve ser um endereço de email válido.',
                 'email.unique' => 'O email já está em uso.',
-                'role.in' => 'A função deve ser um dos seguintes: admin, support, assistant.',
+                'role.in' => 'A função deve ser um dos seguintes: admin, support, assistant, cliente.',
             ]
         );
 
@@ -152,12 +152,14 @@ class UserController extends Controller
         $admins = User::where('role', 'admin')->count();
         $support = User::where('role', 'support')->count();
         $assistant = User::where('role', 'assistant')->count();
+        $cliente = User::where('role', 'cliente')->count();
 
         return response()->json([
             'total' => $total,
             'admins' => $admins,
             'support' => $support,
-            'assistant' => $assistant
+            'assistant' => $assistant,
+            'cliente' => $cliente
         ]);
     }
 }

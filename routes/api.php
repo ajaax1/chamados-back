@@ -7,6 +7,7 @@ use App\Http\Controllers\TicketController;
 use App\Http\Controllers\MessageController;
 use App\Http\Controllers\WhatsappWebhookController;
 use App\Http\Controllers\PasswordResetController;
+use App\Http\Controllers\AttachmentController;
 
 /*
 |--------------------------------------------------------------------------
@@ -65,5 +66,12 @@ Route::middleware('auth:sanctum')->group(function () {
     // Messages - All roles can view and create
     Route::get('tickets/{ticket}/messages', [MessageController::class, 'index']);
     Route::post('tickets/{ticket}/messages', [MessageController::class, 'store']);
+
+    // Attachments - Upload, list, download and delete files
+    Route::post('tickets/{ticket}/attachments', [AttachmentController::class, 'store']);
+    Route::get('tickets/{ticket}/attachments', [AttachmentController::class, 'index']);
+    Route::get('attachments/{attachment}', [AttachmentController::class, 'show']);
+    Route::get('attachments/{attachment}/download', [AttachmentController::class, 'download']);
+    Route::delete('attachments/{attachment}', [AttachmentController::class, 'destroy']);
 
 });

@@ -6,17 +6,27 @@ use Illuminate\Database\Eloquent\Model;
 class Ticket extends Model
 {
     protected $fillable = [
-        'nome_cliente', 'whatsapp_numero', 'user_id', 'descricao', 'status', 'title', 'priority'
+        'nome_cliente', 'whatsapp_numero', 'user_id', 'cliente_id', 'descricao', 'status', 'title', 'priority'
     ];
 
     public function user()
     {
-        return $this->belongsTo(User::class);
+        return $this->belongsTo(User::class, 'user_id');
+    }
+
+    public function cliente()
+    {
+        return $this->belongsTo(User::class, 'cliente_id');
     }
 
     public function messages()
     {
         return $this->hasMany(WhatsappMessage::class);
+    }
+
+    public function attachments()
+    {
+        return $this->hasMany(TicketAttachment::class);
     }
 
     // filtros de busca

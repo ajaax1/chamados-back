@@ -1,0 +1,193 @@
+{
+  "ticket_example": {
+    "id": 1,
+    "title": "Problema no sistema de login",
+    "nome_cliente": "João Silva",
+    "whatsapp_numero": "5511999999999",
+    "descricao": "Não consigo fazer login no sistema",
+    "status": "aberto",
+    "priority": "alta",
+    "user_id": 2,
+    "cliente_id": 5,
+    "user": {
+      "id": 2,
+      "name": "Maria Atendente",
+      "email": "maria@email.com",
+      "role": "support",
+      "created_at": "2025-10-01T00:00:00.000000Z",
+      "updated_at": "2025-10-01T00:00:00.000000Z"
+    },
+    "cliente": {
+      "id": 5,
+      "name": "João Silva",
+      "email": "joao@email.com",
+      "role": "cliente",
+      "created_at": "2025-11-01T00:00:00.000000Z",
+      "updated_at": "2025-11-01T00:00:00.000000Z"
+    },
+    "attachments": [
+      {
+        "id": 1,
+        "ticket_id": 1,
+        "nome_arquivo": "screenshot.png",
+        "caminho_arquivo": "tickets/1/550e8400-e29b-41d4-a716-446655440000.png",
+        "tipo_mime": "image/png",
+        "tamanho": 245760,
+        "url": "http://localhost/storage/tickets/1/550e8400-e29b-41d4-a716-446655440000.png",
+        "created_at": "2025-11-13T10:30:00.000000Z",
+        "updated_at": "2025-11-13T10:30:00.000000Z"
+      },
+      {
+        "id": 2,
+        "ticket_id": 1,
+        "nome_arquivo": "documento.pdf",
+        "caminho_arquivo": "tickets/1/550e8400-e29b-41d4-a716-446655440001.pdf",
+        "tipo_mime": "application/pdf",
+        "tamanho": 1024000,
+        "url": "http://localhost/storage/tickets/1/550e8400-e29b-41d4-a716-446655440001.pdf",
+        "created_at": "2025-11-13T10:35:00.000000Z",
+        "updated_at": "2025-11-13T10:35:00.000000Z"
+      }
+    ],
+    "messages": [
+      {
+        "id": 1,
+        "ticket_id": 1,
+        "mensagem": "Olá, como posso ajudar?",
+        "tipo": "enviado",
+        "criado_em": "2025-11-13T10:00:00.000000Z"
+      }
+    ],
+    "created_at": "2025-11-13T09:00:00.000000Z",
+    "updated_at": "2025-11-13T10:35:00.000000Z"
+  },
+
+  "tickets_list_example": {
+    "data": [
+      {
+        "id": 1,
+        "title": "Problema no sistema",
+        "nome_cliente": "João Silva",
+        "status": "aberto",
+        "priority": "alta",
+        "user_id": 2,
+        "cliente_id": 5,
+        "user": {
+          "id": 2,
+          "name": "Maria Atendente",
+          "email": "maria@email.com",
+          "role": "support"
+        },
+        "cliente": {
+          "id": 5,
+          "name": "João Silva",
+          "email": "joao@email.com",
+          "role": "cliente"
+        },
+        "attachments": [],
+        "created_at": "2025-11-13T09:00:00.000000Z",
+        "updated_at": "2025-11-13T09:00:00.000000Z"
+      }
+    ],
+    "links": {
+      "first": "http://localhost/api/tickets-filtro?page=1",
+      "last": "http://localhost/api/tickets-filtro?page=10",
+      "prev": null,
+      "next": "http://localhost/api/tickets-filtro?page=2"
+    },
+    "meta": {
+      "current_page": 1,
+      "from": 1,
+      "last_page": 10,
+      "path": "http://localhost/api/tickets-filtro",
+      "per_page": 10,
+      "to": 10,
+      "total": 100
+    }
+  },
+
+  "upload_attachments_response": {
+    "message": "Arquivos enviados com sucesso",
+    "anexos": [
+      {
+        "id": 1,
+        "ticket_id": 5,
+        "nome_arquivo": "documento.pdf",
+        "caminho_arquivo": "tickets/5/550e8400-e29b-41d4-a716-446655440000.pdf",
+        "tipo_mime": "application/pdf",
+        "tamanho": 1024000,
+        "url": "http://localhost/storage/tickets/5/550e8400-e29b-41d4-a716-446655440000.pdf",
+        "created_at": "2025-11-13T10:30:00.000000Z",
+        "updated_at": "2025-11-13T10:30:00.000000Z"
+      },
+      {
+        "id": 2,
+        "ticket_id": 5,
+        "nome_arquivo": "imagem.jpg",
+        "caminho_arquivo": "tickets/5/550e8400-e29b-41d4-a716-446655440001.jpg",
+        "tipo_mime": "image/jpeg",
+        "tamanho": 512000,
+        "url": "http://localhost/storage/tickets/5/550e8400-e29b-41d4-a716-446655440001.jpg",
+        "created_at": "2025-11-13T10:30:00.000000Z",
+        "updated_at": "2025-11-13T10:30:00.000000Z"
+      }
+    ]
+  },
+
+  "users_stats_example": {
+    "total": 10,
+    "admins": 1,
+    "support": 2,
+    "assistant": 3,
+    "cliente": 4
+  },
+
+  "user_example": {
+    "id": 5,
+    "name": "João Silva",
+    "email": "joao@email.com",
+    "role": "cliente",
+    "created_at": "2025-11-01T00:00:00.000000Z",
+    "updated_at": "2025-11-01T00:00:00.000000Z"
+  },
+
+  "error_responses": {
+    "unauthorized": {
+      "message": "Unauthenticated"
+    },
+    "forbidden_cliente": {
+      "message": "Acesso negado. Você não tem permissão para ver este chamado."
+    },
+    "forbidden_edit": {
+      "message": "Acesso negado. Clientes não podem editar chamados."
+    },
+    "forbidden_delete": {
+      "message": "Acesso negado. Clientes não podem deletar anexos."
+    },
+    "not_found": {
+      "message": "Chamado não encontrado"
+    },
+    "validation_error": {
+      "message": "The given data was invalid.",
+      "errors": {
+        "title": ["O título do chamado é obrigatório."],
+        "cliente_id": ["O cliente não existe."]
+      }
+    }
+  },
+
+  "attachment_types": {
+    "image": {
+      "jpeg": "image/jpeg",
+      "jpg": "image/jpeg",
+      "png": "image/png",
+      "gif": "image/gif"
+    },
+    "document": {
+      "pdf": "application/pdf",
+      "doc": "application/msword",
+      "docx": "application/vnd.openxmlformats-officedocument.wordprocessingml.document"
+    }
+  }
+}
+

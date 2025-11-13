@@ -9,7 +9,16 @@ class TicketController extends Controller
 {
     public function index(Request $request)
     {
+        $user = $request->user();
         $query = Ticket::query();
+
+        // Cliente só pode ver seus próprios tickets
+        if ($user->isCliente()) {
+            $query->where('cliente_id', $user->id);
+        } elseif (!$user->canViewAllTickets()) {
+            // Assistant só vê tickets atribuídos a ele
+            $query->where('user_id', $user->id);
+        }
 
         if ($search = $request->query('search')) {
             $query->where('title', 'like', "%{$search}%");
@@ -23,6 +32,10 @@ class TicketController extends Controller
             $query->where('user_id', $userId);
         }
 
+        if ($clienteId = $request->query('cliente_id')) {
+            $query->where('cliente_id', $clienteId);
+        }
+
         if ($priority = $request->query('priority')) {
             $query->where('priority', $priority);
         }
@@ -33,21 +46,31 @@ class TicketController extends Controller
 
         $query->orderBy('created_at', 'desc');
 
-        return $query->with('user')->paginate(10);
+        return $query->with('user', 'cliente', 'attachments')->paginate(10);
     }
 
 
     public function store(Request $request)
     {
+        $user = $request->user();
+
+        $validationRules = [
+            'title' => 'required|string|max:250',
+            'nome_cliente' => 'required|string|max:100',
+            'whatsapp_numero' => 'nullable|string|max:20',
+            'descricao' => 'required|string',
+            'status' => 'required|nullable|in:aberto,pendente,resolvido,finalizado',
+            'priority' => 'required|in:baixa,média,alta',
+        ];
+
+        // Admin e support podem definir cliente_id e user_id
+        if ($user->canViewAllTickets()) {
+            $validationRules['cliente_id'] = 'nullable|exists:users,id';
+            $validationRules['user_id'] = 'nullable|exists:users,id';
+        }
+
         $data = $request->validate(
-            [
-                'title' => 'required|string|max:250',
-                'nome_cliente' => 'required|string|max:100',
-                'whatsapp_numero' => 'nullable|string|max:20',
-                'descricao' => 'required|string',
-                'status' => 'required|nullable|in:aberto,pendente,resolvido,finalizado',
-                'priority' => 'required|in:baixa,média,alta',
-            ],
+            $validationRules,
             [
                 'nome_cliente.required' => 'O nome do cliente é obrigatório.',
                 'descricao.required' => 'A descrição do chamado é obrigatória.',
@@ -56,22 +79,41 @@ class TicketController extends Controller
                 'status.required' => 'O status é obrigatório.',
                 'title.required' => 'O título do chamado é obrigatório.',
                 'priority.in' => 'A prioridade deve ser um dos seguintes: baixa, média, alta.',
+                'cliente_id.exists' => 'O cliente não existe.',
+                'user_id.exists' => 'O usuário não existe.',
             ]
         );
 
-        $data['user_id'] = $request->user()->id;
+        // Se for cliente, automaticamente define cliente_id como o próprio usuário
+        if ($user->isCliente()) {
+            $data['cliente_id'] = $user->id;
+        }
+
+        // Se não foi definido user_id e não é cliente, define como o usuário logado
+        if (!isset($data['user_id']) && !$user->isCliente()) {
+            $data['user_id'] = $user->id;
+        }
+
         $ticket = Ticket::create($data);
-        return response()->json($ticket, 201);
+        return response()->json($ticket->load('user', 'cliente', 'attachments'), 201);
     }
 
     // VISUALIZAR
-    public function show($id)
+    public function show(Request $request, $id)
     {
+        $user = $request->user();
         $ticket = Ticket::find($id);
+
         if (!$ticket) {
             return response()->json(['message' => 'Chamado não encontrado'], 404);
         }
-        return response()->json($ticket->load('user', 'messages'));
+
+        // Verificar permissão para ver o ticket
+        if (!$user->canViewTicket($ticket)) {
+            return response()->json(['message' => 'Acesso negado. Você não tem permissão para ver este chamado.'], 403);
+        }
+
+        return response()->json($ticket->load('user', 'cliente', 'messages', 'attachments'));
     }
 
     public function update(Request $request, int $id)
@@ -83,20 +125,38 @@ class TicketController extends Controller
             return response()->json(['message' => 'Chamado não encontrado'], 404);
         }
 
+        // Verificar permissão para editar o ticket
+        if (!$user->canViewTicket($ticket)) {
+            return response()->json(['message' => 'Acesso negado. Você não tem permissão para editar este chamado.'], 403);
+        }
+
+        // Cliente não pode editar tickets (apenas visualizar)
+        if ($user->isCliente()) {
+            return response()->json(['message' => 'Acesso negado. Clientes não podem editar chamados.'], 403);
+        }
+
+        $validationRules = [
+            'title' => 'string|max:250',
+            'nome_cliente' => 'string|max:100',
+            'whatsapp_numero' => 'nullable|string|max:20',
+            'descricao' => 'string',
+            'status' => 'nullable|in:aberto,pendente,resolvido,finalizado',
+            'priority' => 'in:baixa,média,alta',
+        ];
+
+        // Admin e support podem alterar cliente_id e user_id
+        if ($user->canViewAllTickets()) {
+            $validationRules['cliente_id'] = 'nullable|exists:users,id';
+            $validationRules['user_id'] = 'nullable|exists:users,id';
+        }
+
         $data = $request->validate(
-            [
-                'title' => 'string|max:250',
-                'nome_cliente' => 'string|max:100',
-                'whatsapp_numero' => 'nullable|string|max:20',
-                'descricao' => 'string',
-                'status' => 'nullable|in:aberto,pendente,resolvido,finalizado',
-                'priority' => 'in:baixa,média,alta',
-                'user_id' => 'nullable|exists:users,id',
-            ],
+            $validationRules,
             [
                 'status.in' => 'O status deve ser um dos seguintes: aberto, pendente, resolvido, finalizado.',
                 'whatsapp_numero.max' => 'O número de WhatsApp não pode exceder 20 caracteres.',
                 'priority.in' => 'A prioridade deve ser um dos seguintes: baixa, média, alta.',
+                'cliente_id.exists' => 'O cliente não existe.',
                 'user_id.exists' => 'O usuário não existe.',
             ]
         );
@@ -104,7 +164,7 @@ class TicketController extends Controller
         $ticket->fill($data);
         $ticket->save();
 
-        return response()->json($ticket->fresh(), 200);
+        return response()->json($ticket->fresh()->load('user', 'cliente', 'attachments'), 200);
     }
 
 
@@ -113,9 +173,19 @@ class TicketController extends Controller
     {
         $user = $request->user();
 
+        // Verificar permissão para ver o ticket
+        if (!$user->canViewTicket($ticket)) {
+            return response()->json(['message' => 'Acesso negado. Você não tem permissão para ver este chamado.'], 403);
+        }
+
+        // Cliente não pode deletar tickets
+        if ($user->isCliente()) {
+            return response()->json(['message' => 'Acesso negado. Clientes não podem deletar chamados.'], 403);
+        }
+
         // Check if user can delete this ticket
         if (!$user->canDeleteTickets() && $ticket->user_id !== $user->id) {
-            return response()->json(['message' => 'Access denied. You can only delete your own tickets.'], 403);
+            return response()->json(['message' => 'Acesso negado. Você só pode deletar seus próprios tickets.'], 403);
         }
 
         $ticket->delete();
@@ -123,12 +193,23 @@ class TicketController extends Controller
     }
 
     // ESTATÍSTICAS DOS TICKETS
-    public function stats()
+    public function stats(Request $request)
     {
-        $total = Ticket::count();
-        $abertos = Ticket::where('status', 'aberto')->count();
-        $resolvidos = Ticket::where('status', 'resolvido')->count();
-        $pendentes = Ticket::where('status', 'pendente')->count();
+        $user = $request->user();
+        $query = Ticket::query();
+
+        // Cliente só vê estatísticas dos seus próprios tickets
+        if ($user->isCliente()) {
+            $query->where('cliente_id', $user->id);
+        } elseif (!$user->canViewAllTickets()) {
+            // Assistant só vê estatísticas dos tickets atribuídos a ele
+            $query->where('user_id', $user->id);
+        }
+
+        $total = $query->count();
+        $abertos = (clone $query)->where('status', 'aberto')->count();
+        $resolvidos = (clone $query)->where('status', 'resolvido')->count();
+        $pendentes = (clone $query)->where('status', 'pendente')->count();
 
         return response()->json([
             'total' => $total,

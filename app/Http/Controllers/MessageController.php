@@ -8,14 +8,28 @@ use App\Models\WhatsappMessage;
 class MessageController extends Controller
 {
     // LISTAR MENSAGENS DE UM CHAMADO
-    public function index(Ticket $ticket)
+    public function index(Request $request, Ticket $ticket)
     {
+        $user = $request->user();
+
+        // Verificar permissão para ver o ticket
+        if (!$user->canViewTicket($ticket)) {
+            return response()->json(['message' => 'Acesso negado. Você não tem permissão para ver este chamado.'], 403);
+        }
+
         return $ticket->messages()->orderBy('criado_em')->get();
     }
 
     // ENVIAR RESPOSTA PELO WHATSAPP
     public function store(Request $request, Ticket $ticket)
     {
+        $user = $request->user();
+
+        // Verificar permissão para ver o ticket
+        if (!$user->canViewTicket($ticket)) {
+            return response()->json(['message' => 'Acesso negado. Você não tem permissão para enviar mensagens neste chamado.'], 403);
+        }
+
         $data = $request->validate([
             'mensagem' => 'required|string'
         ]);

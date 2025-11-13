@@ -22,7 +22,12 @@ class User extends Authenticatable
 
     public function tickets()
     {
-        return $this->hasMany(Ticket::class);
+        return $this->hasMany(Ticket::class, 'user_id');
+    }
+
+    public function ticketsAsCliente()
+    {
+        return $this->hasMany(Ticket::class, 'cliente_id');
     }
 
     // Role checking methods
@@ -39,6 +44,11 @@ class User extends Authenticatable
     public function isAssistant()
     {
         return $this->role === 'assistant';
+    }
+
+    public function isCliente()
+    {
+        return $this->role === 'cliente';
     }
 
     // Permission checking methods
@@ -75,5 +85,21 @@ class User extends Authenticatable
     public function canViewOwnTickets()
     {
         return true; // All roles can view their own tickets
+    }
+
+    public function canViewTicket($ticket)
+    {
+        // Admin e support podem ver todos
+        if ($this->canViewAllTickets()) {
+            return true;
+        }
+
+        // Cliente só pode ver seus próprios tickets
+        if ($this->isCliente()) {
+            return $ticket->cliente_id === $this->id;
+        }
+
+        // Assistant pode ver tickets atribuídos a ele
+        return $ticket->user_id === $this->id;
     }
 }
