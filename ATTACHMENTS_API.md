@@ -6,7 +6,7 @@ O sistema permite anexar múltiplos arquivos (PDFs, imagens, documentos) aos cha
 
 ## Tipos de Arquivos Permitidos
 
-- **Imagens**: jpeg, jpg, png, gif
+- **Imagens**: jpeg, jpg, png, gif, webp
 - **Documentos**: pdf, doc, docx
 - **Tamanho máximo**: 10MB por arquivo
 - **Quantidade**: Até 10 arquivos por upload

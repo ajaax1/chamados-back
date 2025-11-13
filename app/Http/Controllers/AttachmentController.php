@@ -24,14 +24,14 @@ class AttachmentController extends Controller
 
         $request->validate([
             'arquivos' => 'required|array|min:1|max:10',
-            'arquivos.*' => 'file|mimes:jpeg,jpg,png,gif,pdf,doc,docx|max:10240', // 10MB max por arquivo
+            'arquivos.*' => 'file|mimes:jpeg,jpg,png,gif,webp,pdf,doc,docx|max:10240', // 10MB max por arquivo
         ], [
             'arquivos.required' => 'É necessário enviar pelo menos um arquivo.',
             'arquivos.array' => 'Os arquivos devem ser enviados como array.',
             'arquivos.min' => 'É necessário enviar pelo menos um arquivo.',
             'arquivos.max' => 'Máximo de 10 arquivos por vez.',
             'arquivos.*.file' => 'Cada item deve ser um arquivo válido.',
-            'arquivos.*.mimes' => 'Apenas arquivos do tipo: jpeg, jpg, png, gif, pdf, doc, docx são permitidos.',
+            'arquivos.*.mimes' => 'Apenas arquivos do tipo: jpeg, jpg, png, gif, webp, pdf, doc, docx são permitidos.',
             'arquivos.*.max' => 'Cada arquivo deve ter no máximo 10MB.',
         ]);
 
