@@ -241,3 +241,5 @@ public function verifyToken(Request $request)
 ```
 
 Agora o erro `Call to a member function addHour() on string` foi corrigido e você tem logs detalhados para debug!
+
+

@@ -98,8 +98,8 @@ class TicketController extends Controller
 
         $ticket = Ticket::create($data);
         
-        // Enviar notificações
-        $this->sendAssignmentNotifications($ticket, $user);
+        // Enviar notificações quando um ticket é criado
+        $this->sendTicketNotifications($ticket, null);
         
         return response()->json($ticket->load('user', 'cliente', 'attachments'), 201);
     }
@@ -167,18 +167,19 @@ class TicketController extends Controller
             ]
         );
 
-        // Guardar valores antigos para comparar
+        // Verificar se user_id ou cliente_id foi alterado
         $oldUserId = $ticket->user_id;
         $oldClienteId = $ticket->cliente_id;
         
         $ticket->fill($data);
         $ticket->save();
-        
-        // Enviar notificações se user_id ou cliente_id foram alterados
-        if (isset($data['user_id']) && $data['user_id'] != $oldUserId) {
-            $this->sendAssignmentNotifications($ticket, $user);
-        } elseif (isset($data['cliente_id']) && $data['cliente_id'] != $oldClienteId) {
-            $this->sendAssignmentNotifications($ticket, $user);
+
+        // Enviar notificações se user_id ou cliente_id foi alterado
+        if ($oldUserId !== $ticket->user_id || $oldClienteId !== $ticket->cliente_id) {
+            $this->sendTicketNotifications($ticket, [
+                'old_user_id' => $oldUserId,
+                'old_cliente_id' => $oldClienteId
+            ]);
         }
 
         return response()->json($ticket->fresh()->load('user', 'cliente', 'attachments'), 200);
@@ -237,23 +238,40 @@ class TicketController extends Controller
     }
 
     /**
-     * Envia notificações quando um ticket é atribuído a um usuário ou cliente
+     * Envia notificações quando um ticket é atribuído a um usuário
      */
-    private function sendAssignmentNotifications(Ticket $ticket, User $currentUser)
+    private function sendTicketNotifications(Ticket $ticket, $oldData = null)
     {
-        // Notificar usuário atribuído (user_id) - admin, support ou assistant
-        if ($ticket->user_id && $ticket->user_id != $currentUser->id) {
+        // Notificar o usuário atribuído (user_id) - admin, support ou assistant
+        if ($ticket->user_id) {
             $assignedUser = User::find($ticket->user_id);
             if ($assignedUser) {
-                $assignedUser->notify(new TicketAssignedNotification($ticket, 'user'));
+                // Só notificar se for uma nova atribuição ou se mudou
+                if (!$oldData || $oldData['old_user_id'] !== $ticket->user_id) {
+                    $assignedUser->notify(new TicketAssignedNotification($ticket, 'user'));
+                }
             }
         }
 
-        // Notificar cliente atribuído (cliente_id)
-        if ($ticket->cliente_id && $ticket->cliente_id != $currentUser->id) {
-            $assignedCliente = User::find($ticket->cliente_id);
-            if ($assignedCliente) {
-                $assignedCliente->notify(new TicketAssignedNotification($ticket, 'cliente'));
+        // Notificar o cliente (cliente_id)
+        if ($ticket->cliente_id) {
+            $cliente = User::find($ticket->cliente_id);
+            if ($cliente) {
+                // Só notificar se for uma nova atribuição ou se mudou
+                if (!$oldData || $oldData['old_cliente_id'] !== $ticket->cliente_id) {
+                    $cliente->notify(new TicketAssignedNotification($ticket, 'cliente'));
+                }
+            }
+        }
+
+        // Notificar todos os admins quando um novo ticket é criado
+        if (!$oldData) {
+            $admins = User::where('role', 'admin')->get();
+            foreach ($admins as $admin) {
+                // Não notificar o admin se ele já foi notificado como user_id
+                if ($ticket->user_id !== $admin->id) {
+                    $admin->notify(new TicketAssignedNotification($ticket, 'user'));
+                }
             }
         }
     }

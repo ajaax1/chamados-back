@@ -8,6 +8,7 @@ use App\Http\Controllers\MessageController;
 use App\Http\Controllers\WhatsappWebhookController;
 use App\Http\Controllers\PasswordResetController;
 use App\Http\Controllers\AttachmentController;
+use App\Http\Controllers\NotificationController;
 
 /*
 |--------------------------------------------------------------------------
@@ -73,5 +74,13 @@ Route::middleware('auth:sanctum')->group(function () {
     Route::get('attachments/{attachment}', [AttachmentController::class, 'show']);
     Route::get('attachments/{attachment}/download', [AttachmentController::class, 'download']);
     Route::delete('attachments/{attachment}', [AttachmentController::class, 'destroy']);
+
+    // Notifications - Gerenciar notificações do usuário
+    Route::get('notifications', [NotificationController::class, 'index']);
+    Route::get('notifications/unread', [NotificationController::class, 'unread']);
+    Route::get('notifications/count', [NotificationController::class, 'count']);
+    Route::post('notifications/{id}/read', [NotificationController::class, 'markAsRead']);
+    Route::post('notifications/read-all', [NotificationController::class, 'markAllAsRead']);
+    Route::delete('notifications/{id}', [NotificationController::class, 'destroy']);
 
 });

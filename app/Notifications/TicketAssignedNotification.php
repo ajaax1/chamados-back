@@ -13,15 +13,15 @@ class TicketAssignedNotification extends Notification
     use Queueable;
 
     protected $ticket;
-    protected $assignmentType; // 'user' ou 'cliente'
+    protected $assignedType; // 'user' ou 'cliente'
 
     /**
      * Create a new notification instance.
      */
-    public function __construct(Ticket $ticket, string $assignmentType = 'user')
+    public function __construct(Ticket $ticket, string $assignedType = 'user')
     {
         $this->ticket = $ticket;
-        $this->assignmentType = $assignmentType;
+        $this->assignedType = $assignedType;
     }
 
     /**
@@ -31,7 +31,7 @@ class TicketAssignedNotification extends Notification
      */
     public function via(object $notifiable): array
     {
-        return ['database'];
+        return ['database', 'mail'];
     }
 
     /**
@@ -39,16 +39,19 @@ class TicketAssignedNotification extends Notification
      */
     public function toMail(object $notifiable): MailMessage
     {
-        $message = $this->assignmentType === 'cliente' 
-            ? "Um novo chamado foi criado para você: {$this->ticket->title}"
-            : "Um chamado foi atribuído a você: {$this->ticket->title}";
-
+        $ticketUrl = url('/tickets/' . $this->ticket->id);
+        $role = $this->assignedType === 'cliente' ? 'cliente' : 'atendente';
+        
         return (new MailMessage)
-                    ->subject('Novo Chamado Atribuído')
-                    ->line($message)
-                    ->line("Prioridade: {$this->ticket->priority}")
-                    ->line("Status: {$this->ticket->status}")
-                    ->action('Ver Chamado', url("/tickets/{$this->ticket->id}"));
+                    ->subject('Novo Chamado Atribuído - #' . $this->ticket->id)
+                    ->greeting('Olá, ' . $notifiable->name . '!')
+                    ->line('Um novo chamado foi atribuído a você como ' . $role . '.')
+                    ->line('**Título:** ' . $this->ticket->title)
+                    ->line('**Cliente:** ' . $this->ticket->nome_cliente)
+                    ->line('**Status:** ' . ucfirst($this->ticket->status))
+                    ->line('**Prioridade:** ' . ucfirst($this->ticket->priority))
+                    ->action('Ver Chamado', $ticketUrl)
+                    ->line('Obrigado por usar nosso sistema!');
     }
 
     /**
@@ -58,18 +61,15 @@ class TicketAssignedNotification extends Notification
      */
     public function toArray(object $notifiable): array
     {
-        $message = $this->assignmentType === 'cliente' 
-            ? "Um novo chamado foi criado para você: {$this->ticket->title}"
-            : "Um chamado foi atribuído a você: {$this->ticket->title}";
-
         return [
             'ticket_id' => $this->ticket->id,
             'ticket_title' => $this->ticket->title,
             'ticket_status' => $this->ticket->status,
             'ticket_priority' => $this->ticket->priority,
-            'assignment_type' => $this->assignmentType,
-            'message' => $message,
-            'created_at' => now()->toDateTimeString(),
+            'assigned_type' => $this->assignedType,
+            'message' => $this->assignedType === 'cliente' 
+                ? 'Um novo chamado foi criado para você: ' . $this->ticket->title
+                : 'Um novo chamado foi atribuído a você: ' . $this->ticket->title,
         ];
     }
 }
