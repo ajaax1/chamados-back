@@ -37,21 +37,19 @@ class TicketAssignedNotification extends Notification
     /**
      * Get the mail representation of the notification.
      */
-    public function toMail(object $notifiable): MailMessage
+    public function toMail(object $notifiable)
     {
         $ticketUrl = url('/tickets/' . $this->ticket->id);
         $role = $this->assignedType === 'cliente' ? 'cliente' : 'atendente';
         
         return (new MailMessage)
-                    ->subject('Novo Chamado Atribuído - #' . $this->ticket->id)
-                    ->greeting('Olá, ' . $notifiable->name . '!')
-                    ->line('Um novo chamado foi atribuído a você como ' . $role . '.')
-                    ->line('**Título:** ' . $this->ticket->title)
-                    ->line('**Cliente:** ' . $this->ticket->nome_cliente)
-                    ->line('**Status:** ' . ucfirst($this->ticket->status))
-                    ->line('**Prioridade:** ' . ucfirst($this->ticket->priority))
-                    ->action('Ver Chamado', $ticketUrl)
-                    ->line('Obrigado por usar nosso sistema!');
+                    ->subject('Novo Chamado Atribuído - #' . $this->ticket->id . ' - Sistema de Chamados')
+                    ->view('emails.ticket-notification', [
+                        'user' => $notifiable,
+                        'ticket' => $this->ticket,
+                        'ticketUrl' => $ticketUrl,
+                        'role' => $role
+                    ]);
     }
 
     /**

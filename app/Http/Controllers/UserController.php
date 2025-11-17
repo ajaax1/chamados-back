@@ -162,4 +162,15 @@ class UserController extends Controller
             'cliente' => $cliente
         ]);
     }
+
+    // BUSCAR TODOS OS CLIENTES (para select)
+    public function getClientes()
+    {
+        $clientes = User::where('role', 'cliente')
+            ->select('id', 'name', 'email')
+            ->orderBy('name', 'asc')
+            ->get();
+
+        return response()->json($clientes);
+    }
 }

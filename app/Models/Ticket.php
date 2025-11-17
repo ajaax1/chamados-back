@@ -24,6 +24,11 @@ class Ticket extends Model
         return $this->hasMany(WhatsappMessage::class);
     }
 
+    public function ticketMessages()
+    {
+        return $this->hasMany(TicketMessage::class);
+    }
+
     public function attachments()
     {
         return $this->hasMany(TicketAttachment::class);

@@ -51,6 +51,7 @@ Route::middleware('auth:sanctum')->group(function () {
         ->middleware('role:admin');
 
     Route::get('users-alphabetical', [UserController::class, 'getAllAlphabetical']);
+    Route::get('clientes', [UserController::class, 'getClientes']);
 
     // Ticket routes with role-based permissions
     Route::get('tickets-filtro', [TicketController::class, 'index']);
@@ -64,9 +65,17 @@ Route::middleware('auth:sanctum')->group(function () {
     Route::delete('tickets/{ticket}', [TicketController::class, 'destroy'])
         ->middleware('role:support');
 
-    // Messages - All roles can view and create
+    // Messages - WhatsApp messages (mantido para compatibilidade)
     Route::get('tickets/{ticket}/messages', [MessageController::class, 'index']);
     Route::post('tickets/{ticket}/messages', [MessageController::class, 'store']);
+
+    // Internal Messages - Sistema de mensagens internas do chamado
+    Route::get('tickets/{ticket}/messages-internal', [MessageController::class, 'indexInternal']);
+    Route::post('tickets/{ticket}/messages-internal', [MessageController::class, 'storeInternal']);
+
+    // Message Attachments - Anexos de mensagens
+    Route::get('message-attachments/{attachment}', [MessageController::class, 'showAttachment']);
+    Route::get('message-attachments/{attachment}/download', [MessageController::class, 'downloadAttachment']);
 
     // Attachments - Upload, list, download and delete files
     Route::post('tickets/{ticket}/attachments', [AttachmentController::class, 'store']);
