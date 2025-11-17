@@ -9,6 +9,7 @@ use App\Models\Ticket;
 use App\Models\WhatsappMessage;
 use App\Models\TicketMessage;
 use App\Models\MessageAttachment;
+use App\Notifications\TicketMessageNotification;
 
 class MessageController extends Controller
 {
@@ -179,11 +180,17 @@ class MessageController extends Controller
             }
         }
 
-        // Carregar relacionamentos
+        // Recarregar mensagem com relacionamentos após salvar anexos
+        $message->refresh();
         $message->load(['user:id,name,email,role', 'attachments']);
 
-        // Enviar notificação por email para o outro participante
-        $this->notifyOtherParticipant($ticket, $user, $message);
+        // Enviar notificação por email para o outro participante (em background para não bloquear resposta)
+        try {
+            $this->notifyOtherParticipant($ticket, $user, $message);
+        } catch (\Exception $e) {
+            // Log do erro mas não interrompe o processo
+            \Log::error('Erro ao enviar notificação: ' . $e->getMessage());
+        }
 
         return response()->json([
             'message' => $message,
@@ -193,65 +200,95 @@ class MessageController extends Controller
 
     /**
      * Notifica o outro participante do chamado sobre a nova mensagem
+     * Salva notificação no banco de dados e envia email
+     * NÃO envia email para quem enviou a mensagem
      */
     private function notifyOtherParticipant(Ticket $ticket, $sender, TicketMessage $message)
     {
         try {
+            // Não notificar se a mensagem for interna
+            if ($message->is_internal) {
+                return;
+            }
+
             $frontendUrl = env('FRONTEND_URL', 'https://tickets-zap.vercel.app');
             $ticketUrl = $frontendUrl . '/tickets/' . $ticket->id;
 
-            // Se o admin/support enviou, notificar o cliente
-            if (!$sender->isCliente() && $ticket->cliente_id && !$message->is_internal) {
+            // Se o admin/support/assistant enviou, SEMPRE notificar o cliente
+            if (!$sender->isCliente() && $ticket->cliente_id) {
                 $cliente = \App\Models\User::find($ticket->cliente_id);
-                if ($cliente) {
-                    Mail::send('emails.ticket-message-notification', [
-                        'user' => $cliente,
-                        'ticket' => $ticket,
-                        'ticketMessage' => $message,
-                        'sender' => $sender,
-                        'ticketUrl' => $ticketUrl,
-                        'role' => 'cliente'
-                    ], function ($mailMessage) use ($ticket, $cliente) {
-                        $mailMessage->to($cliente->email)
-                            ->subject('Nova Mensagem no Chamado #' . $ticket->id . ' - Sistema de Chamados');
-                    });
+                // Verificar se cliente existe e não é o próprio remetente
+                if ($cliente && $cliente->id !== $sender->id) {
+                    // Salva notificação no banco
+                    $cliente->notify(new TicketMessageNotification($ticket, $message, $sender, 'cliente'));
+                    
+                    // Envia email com template customizado
+                    $this->sendEmailNotification($cliente, $ticket, $message, $sender, $ticketUrl, 'cliente');
                 }
             }
-            // Se o cliente enviou, notificar o admin/support atribuído
-            elseif ($sender->isCliente() && $ticket->user_id) {
-                $assignedUser = \App\Models\User::find($ticket->user_id);
-                if ($assignedUser) {
-                    Mail::send('emails.ticket-message-notification', [
-                        'user' => $assignedUser,
-                        'ticket' => $ticket,
-                        'ticketMessage' => $message,
-                        'sender' => $sender,
-                        'ticketUrl' => $ticketUrl,
-                        'role' => 'atendente'
-                    ], function ($mailMessage) use ($ticket, $assignedUser) {
-                        $mailMessage->to($assignedUser->email)
-                            ->subject('Nova Mensagem no Chamado #' . $ticket->id . ' - Sistema de Chamados');
-                    });
+            
+            // Se o cliente enviou, SEMPRE notificar admin/support
+            if ($sender->isCliente()) {
+                // Notificar o usuário atribuído ao chamado (se houver e não for o próprio cliente)
+                if ($ticket->user_id) {
+                    $assignedUser = \App\Models\User::find($ticket->user_id);
+                    if ($assignedUser && $assignedUser->id !== $sender->id) {
+                        // Salva notificação no banco
+                        $assignedUser->notify(new TicketMessageNotification($ticket, $message, $sender, 'atendente'));
+                        
+                        // Envia email com template customizado
+                        $this->sendEmailNotification($assignedUser, $ticket, $message, $sender, $ticketUrl, 'atendente');
+                    }
                 }
-                // Também notificar admin se houver
-                $admin = \App\Models\User::where('role', 'admin')->first();
-                if ($admin && $admin->id !== $ticket->user_id) {
-                    Mail::send('emails.ticket-message-notification', [
-                        'user' => $admin,
-                        'ticket' => $ticket,
-                        'ticketMessage' => $message,
-                        'sender' => $sender,
-                        'ticketUrl' => $ticketUrl,
-                        'role' => 'admin'
-                    ], function ($mailMessage) use ($ticket, $admin) {
-                        $mailMessage->to($admin->email)
-                            ->subject('Nova Mensagem no Chamado #' . $ticket->id . ' - Sistema de Chamados');
-                    });
+
+                // SEMPRE notificar TODOS os admins quando cliente envia mensagem
+                // (exceto se o admin já foi notificado acima como usuário atribuído)
+                $admins = \App\Models\User::where('role', 'admin')->get();
+                foreach ($admins as $admin) {
+                    // Não notificar se for o próprio cliente ou se já foi notificado como usuário atribuído
+                    if ($admin->id !== $sender->id && $admin->id !== $ticket->user_id) {
+                        // Salva notificação no banco
+                        $admin->notify(new TicketMessageNotification($ticket, $message, $sender, 'admin'));
+                        
+                        // Envia email com template customizado
+                        $this->sendEmailNotification($admin, $ticket, $message, $sender, $ticketUrl, 'admin');
+                    }
                 }
             }
         } catch (\Exception $e) {
             // Log do erro mas não interrompe o processo
-            \Log::error('Erro ao enviar notificação de mensagem: ' . $e->getMessage());
+            \Log::error('Erro ao enviar notificação de mensagem: ' . $e->getMessage(), [
+                'ticket_id' => $ticket->id,
+                'message_id' => $message->id,
+                'sender_id' => $sender->id,
+                'error' => $e->getMessage()
+            ]);
+        }
+    }
+
+    /**
+     * Envia email de notificação usando template customizado
+     */
+    private function sendEmailNotification($recipient, Ticket $ticket, TicketMessage $message, $sender, $ticketUrl, $role)
+    {
+        try {
+            Mail::send('emails.ticket-message-notification', [
+                'user' => $recipient,
+                'ticket' => $ticket,
+                'ticketMessage' => $message,
+                'sender' => $sender,
+                'ticketUrl' => $ticketUrl,
+                'role' => $role
+            ], function ($mailMessage) use ($recipient, $ticket) {
+                $mailMessage->to($recipient->email)
+                    ->subject('Nova Mensagem no Chamado #' . $ticket->id . ' - Sistema de Chamados');
+            });
+        } catch (\Exception $e) {
+            \Log::error('Erro ao enviar email de notificação: ' . $e->getMessage(), [
+                'recipient_id' => $recipient->id,
+                'ticket_id' => $ticket->id,
+                'message_id' => $message->id
+            ]);
         }
     }
 }
