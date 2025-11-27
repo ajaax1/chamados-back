@@ -9,6 +9,7 @@ use App\Http\Controllers\WhatsappWebhookController;
 use App\Http\Controllers\PasswordResetController;
 use App\Http\Controllers\AttachmentController;
 use App\Http\Controllers\NotificationController;
+use App\Http\Controllers\StatisticsController;
 
 /*
 |--------------------------------------------------------------------------
@@ -91,5 +92,15 @@ Route::middleware('auth:sanctum')->group(function () {
     Route::post('notifications/{id}/read', [NotificationController::class, 'markAsRead']);
     Route::post('notifications/read-all', [NotificationController::class, 'markAllAsRead']);
     Route::delete('notifications/{id}', [NotificationController::class, 'destroy']);
+
+    // Statistics - Estatísticas para administradores
+    Route::prefix('admin/statistics')->middleware('role:admin')->group(function () {
+        Route::get('dashboard', [StatisticsController::class, 'dashboard']);
+        Route::get('tickets', [StatisticsController::class, 'tickets']);
+        Route::get('users', [StatisticsController::class, 'users']);
+        Route::get('messages', [StatisticsController::class, 'messages']);
+        Route::get('attachments', [StatisticsController::class, 'attachments']);
+        Route::get('trends', [StatisticsController::class, 'trends']);
+    });
 
 });

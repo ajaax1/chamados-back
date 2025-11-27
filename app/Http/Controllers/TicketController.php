@@ -63,6 +63,8 @@ class TicketController extends Controller
             'descricao' => 'required|string',
             'status' => 'required|nullable|in:aberto,pendente,resolvido,finalizado',
             'priority' => 'required|in:baixa,média,alta',
+            'tempo_resolucao' => 'nullable|integer|min:0',
+            'resolvido_em' => 'nullable|date',
         ];
 
         // Admin e support podem definir cliente_id e user_id
@@ -83,6 +85,9 @@ class TicketController extends Controller
                 'priority.in' => 'A prioridade deve ser um dos seguintes: baixa, média, alta.',
                 'cliente_id.exists' => 'O cliente não existe.',
                 'user_id.exists' => 'O usuário não existe.',
+                'tempo_resolucao.integer' => 'O tempo de resolução deve ser um número inteiro.',
+                'tempo_resolucao.min' => 'O tempo de resolução não pode ser negativo.',
+                'resolvido_em.date' => 'A data de resolução deve ser uma data válida.',
             ]
         );
 
@@ -97,10 +102,10 @@ class TicketController extends Controller
         }
 
         $ticket = Ticket::create($data);
-        
+
         // Enviar notificações quando um ticket é criado
         $this->sendTicketNotifications($ticket, null);
-        
+
         return response()->json($ticket->load('user', 'cliente', 'attachments'), 201);
     }
 
@@ -148,6 +153,7 @@ class TicketController extends Controller
             'descricao' => 'string',
             'status' => 'nullable|in:aberto,pendente,resolvido,finalizado',
             'priority' => 'in:baixa,média,alta',
+            'tempo_resolucao' => 'nullable|integer|min:0',
         ];
 
         // Admin e support podem alterar cliente_id e user_id
@@ -164,13 +170,16 @@ class TicketController extends Controller
                 'priority.in' => 'A prioridade deve ser um dos seguintes: baixa, média, alta.',
                 'cliente_id.exists' => 'O cliente não existe.',
                 'user_id.exists' => 'O usuário não existe.',
+                'tempo_resolucao.integer' => 'O tempo de resolução deve ser um número inteiro.',
+                'tempo_resolucao.min' => 'O tempo de resolução não pode ser negativo.',
+                'resolvido_em.date' => 'A data de resolução deve ser uma data válida.',
             ]
         );
 
         // Verificar se user_id ou cliente_id foi alterado
         $oldUserId = $ticket->user_id;
         $oldClienteId = $ticket->cliente_id;
-        
+
         $ticket->fill($data);
         $ticket->save();
 
