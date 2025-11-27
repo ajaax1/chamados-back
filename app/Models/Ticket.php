@@ -6,11 +6,11 @@ use Illuminate\Database\Eloquent\Model;
 class Ticket extends Model
 {
     protected $fillable = [
-        'nome_cliente', 'whatsapp_numero', 'user_id', 'cliente_id', 'descricao', 'status', 'title', 'priority', 'tempo_resolucao', 'resolvido_em'
+        'nome_cliente', 'whatsapp_numero', 'user_id', 'cliente_id', 'descricao', 'status', 'title', 'priority', 'tempo_resolucao', 'prazo_resolucao', 'origem'
     ];
 
     protected $casts = [
-        'resolvido_em' => 'datetime',
+        'prazo_resolucao' => 'datetime',
     ];
 
     public function user()

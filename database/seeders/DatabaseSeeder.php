@@ -12,13 +12,17 @@ class DatabaseSeeder extends Seeder
      */
     public function run(): void
     {
-        // \App\Models\User::factory(10)->create();
-
+        // Criar usuário principal
         \App\Models\User::factory()->create([
             'name' => 'Ruan Higor Silva',
             'email' => 'ruanhigor123@gmail.com',
             'password'=> bcrypt('ajax1233253'),
             'role' => 'admin',
+        ]);
+
+        // Executar seeder de dados simulados para estatísticas
+        $this->call([
+            StatisticsDataSeeder::class,
         ]);
     }
 }

@@ -65,6 +65,13 @@ class StatisticsController extends Controller
             'by_cliente' => $this->getTicketsByCliente($startDate),
             'resolution_time' => $this->getResolutionTimeStats($startDate),
             'resolution_time_by_cliente' => $this->getResolutionTimeByCliente($startDate),
+            // Novas estatísticas
+            'response_time' => $this->getResponseTimeStats($startDate),
+            'agent_productivity' => $this->getAgentProductivity($startDate),
+            'tickets_by_origin' => $this->getTicketsByOrigin($startDate),
+            'tickets_created_by_period' => $this->getTicketsCreatedByPeriod($startDate, $period),
+            'tickets_closed_by_period' => $this->getTicketsClosedByPeriod($startDate, $period),
+            'tickets_by_agent_detailed' => $this->getTicketsByAgentDetailed($startDate),
         ]);
     }
 
@@ -91,6 +98,7 @@ class StatisticsController extends Controller
             'top_performers' => $this->getTopPerformers($startDate),
             'user_activity' => $this->getUserActivity($startDate),
             'average_resolution_time_by_cliente' => $this->getAverageResolutionTimeByCliente($startDate),
+            'resolution_stats_by_user' => $this->getResolutionStatsByUser($startDate),
         ]);
     }
 
@@ -289,27 +297,19 @@ class StatisticsController extends Controller
             ];
         }
 
-        // Prioridade: resolvido_em > tempo_resolucao > cálculo automático
+        // Prioridade: tempo_resolucao > cálculo automático
         $times = $resolvedTickets->map(function ($ticket) {
-            // 1. Se tem data/hora de resolução, usar ela
-            if ($ticket->resolvido_em !== null) {
-                return $ticket->resolvido_em->diffInHours($ticket->created_at);
-            }
-            // 2. Se tem tempo manual em minutos, usar ele
+            // 1. Se tem tempo manual em minutos, usar ele
             if ($ticket->tempo_resolucao !== null) {
                 return $ticket->tempo_resolucao / 60; // Converter minutos para horas
             }
-            // 3. Calcular pela diferença de updated_at
+            // 2. Calcular pela diferença de updated_at
             return $ticket->updated_at->diffInHours($ticket->created_at);
         });
 
         $manualTimes = $resolvedTickets->filter(function ($ticket) {
-            return $ticket->tempo_resolucao !== null || $ticket->resolvido_em !== null;
+            return $ticket->tempo_resolucao !== null;
         });
-
-        $resolvidoEmCount = $resolvedTickets->filter(function ($ticket) {
-            return $ticket->resolvido_em !== null;
-        })->count();
 
         return [
             'average_hours' => round($times->avg(), 2),
@@ -320,7 +320,6 @@ class StatisticsController extends Controller
             'using_manual_time' => $manualTimes->count() > 0,
             'manual_time_count' => $manualTimes->count(),
             'calculated_time_count' => $resolvedTickets->count() - $manualTimes->count(),
-            'resolvido_em_count' => $resolvidoEmCount,
             'tempo_resolucao_count' => $resolvedTickets->filter(function ($ticket) {
                 return $ticket->tempo_resolucao !== null;
             })->count(),
@@ -341,15 +340,11 @@ class StatisticsController extends Controller
 
         $byCliente = $resolvedTickets->groupBy('cliente_id')->map(function ($tickets, $clienteId) {
             $times = $tickets->map(function ($ticket) {
-                // 1. Prioridade: resolvido_em
-                if ($ticket->resolvido_em !== null) {
-                    return $ticket->resolvido_em->diffInMinutes($ticket->created_at);
-                }
-                // 2. Tempo manual em minutos
+                // 1. Tempo manual em minutos
                 if ($ticket->tempo_resolucao !== null) {
                     return $ticket->tempo_resolucao; // Já está em minutos
                 }
-                // 3. Calcular automaticamente
+                // 2. Calcular automaticamente
                 return $ticket->updated_at->diffInMinutes($ticket->created_at);
             });
 
@@ -387,15 +382,11 @@ class StatisticsController extends Controller
         }
 
         $times = $resolvedTickets->map(function ($ticket) {
-            // 1. Prioridade: resolvido_em
-            if ($ticket->resolvido_em !== null) {
-                return $ticket->resolvido_em->diffInMinutes($ticket->created_at);
-            }
-            // 2. Tempo manual em minutos
+            // 1. Tempo manual em minutos
             if ($ticket->tempo_resolucao !== null) {
                 return $ticket->tempo_resolucao; // Já está em minutos
             }
-            // 3. Calcular automaticamente
+            // 2. Calcular automaticamente
             return $ticket->updated_at->diffInMinutes($ticket->created_at);
         });
 
@@ -448,6 +439,56 @@ class StatisticsController extends Controller
                     'resolved_tickets' => $item->resolved
                 ];
             });
+    }
+
+    /**
+     * Estatísticas de resolução por usuário
+     * Retorna quantidade de chamados resolvidos e tempo médio por usuário
+     */
+    private function getResolutionStatsByUser($startDate)
+    {
+        $resolvedTickets = Ticket::where('created_at', '>=', $startDate)
+            ->whereIn('status', ['resolvido', 'finalizado'])
+            ->whereNotNull('user_id')
+            ->with('user:id,name,email,role')
+            ->get();
+
+        if ($resolvedTickets->isEmpty()) {
+            return [];
+        }
+
+        // Agrupar por usuário
+        $byUser = $resolvedTickets->groupBy('user_id')->map(function ($tickets, $userId) {
+            $user = $tickets->first()->user;
+            
+            // Calcular tempos de resolução
+            $times = $tickets->map(function ($ticket) {
+                // 1. Se tem tempo manual em minutos, usar ele
+                if ($ticket->tempo_resolucao !== null) {
+                    return $ticket->tempo_resolucao; // Já está em minutos
+                }
+                // 2. Calcular automaticamente pela diferença de updated_at
+                return $ticket->updated_at->diffInMinutes($ticket->created_at);
+            });
+
+            return [
+                'user_id' => $userId,
+                'user_name' => $user ? $user->name : 'N/A',
+                'user_email' => $user ? $user->email : 'N/A',
+                'user_role' => $user ? $user->role : 'N/A',
+                'total_resolved' => $tickets->count(),
+                'average_minutes' => round($times->avg(), 2),
+                'average_hours' => round($times->avg() / 60, 2),
+                'average_days' => round($times->avg() / (60 * 24), 2),
+                'total_minutes' => round($times->sum(), 2),
+                'total_hours' => round($times->sum() / 60, 2),
+                'min_minutes' => $times->min(),
+                'max_minutes' => $times->max(),
+            ];
+        })->values();
+
+        // Ordenar por quantidade de chamados resolvidos (descendente)
+        return $byUser->sortByDesc('total_resolved')->values()->all();
     }
 
     private function getUserActivity($startDate)
@@ -690,6 +731,299 @@ class StatisticsController extends Controller
                 'rate' => $rate
             ];
         });
+    }
+
+    /**
+     * 🕒 Tempo de Resposta
+     * Tempo médio até primeira resposta, solução e tempo total
+     */
+    private function getResponseTimeStats($startDate)
+    {
+        $tickets = Ticket::where('created_at', '>=', $startDate)
+            ->with(['ticketMessages' => function ($query) {
+                $query->orderBy('created_at', 'asc');
+            }])
+            ->get();
+
+        $firstResponseTimes = [];
+        $resolutionTimes = [];
+        $totalTimes = [];
+
+        foreach ($tickets as $ticket) {
+            // Tempo até primeira resposta (primeira mensagem do agente)
+            $firstMessage = $ticket->ticketMessages()
+                ->where('is_internal', false)
+                ->whereHas('user', function ($q) {
+                    $q->whereIn('role', ['admin', 'support', 'assistant']);
+                })
+                ->orderBy('created_at', 'asc')
+                ->first();
+
+            if ($firstMessage) {
+                $firstResponseMinutes = $ticket->created_at->diffInMinutes($firstMessage->created_at);
+                $firstResponseTimes[] = $firstResponseMinutes;
+            }
+
+            // Tempo até solução (quando foi resolvido)
+            if (in_array($ticket->status, ['resolvido', 'finalizado'])) {
+                if ($ticket->tempo_resolucao !== null) {
+                    $resolutionTimes[] = $ticket->tempo_resolucao;
+                } else {
+                    $resolutionMinutes = $ticket->created_at->diffInMinutes($ticket->updated_at);
+                    $resolutionTimes[] = $resolutionMinutes;
+                }
+            }
+
+            // Tempo total do ticket aberto
+            $totalMinutes = $ticket->created_at->diffInMinutes(now());
+            $totalTimes[] = $totalMinutes;
+        }
+
+        return [
+            'first_response' => [
+                'average_minutes' => count($firstResponseTimes) > 0 ? round(array_sum($firstResponseTimes) / count($firstResponseTimes), 2) : 0,
+                'average_hours' => count($firstResponseTimes) > 0 ? round((array_sum($firstResponseTimes) / count($firstResponseTimes)) / 60, 2) : 0,
+                'tickets_with_response' => count($firstResponseTimes),
+                'total_tickets' => $tickets->count(),
+            ],
+            'resolution_time' => [
+                'average_minutes' => count($resolutionTimes) > 0 ? round(array_sum($resolutionTimes) / count($resolutionTimes), 2) : 0,
+                'average_hours' => count($resolutionTimes) > 0 ? round((array_sum($resolutionTimes) / count($resolutionTimes)) / 60, 2) : 0,
+                'resolved_tickets' => count($resolutionTimes),
+            ],
+            'total_open_time' => [
+                'average_minutes' => count($totalTimes) > 0 ? round(array_sum($totalTimes) / count($totalTimes), 2) : 0,
+                'average_hours' => count($totalTimes) > 0 ? round((array_sum($totalTimes) / count($totalTimes)) / 60, 2) : 0,
+                'average_days' => count($totalTimes) > 0 ? round((array_sum($totalTimes) / count($totalTimes)) / (60 * 24), 2) : 0,
+            ],
+        ];
+    }
+
+    /**
+     * 👨‍💻 Produtividade dos Agentes
+     * Tickets atribuídos, fechados, tempo médio de resposta, taxa de resolução, não resolvidos
+     */
+    private function getAgentProductivity($startDate)
+    {
+        $tickets = Ticket::where('created_at', '>=', $startDate)
+            ->whereNotNull('user_id')
+            ->with('user:id,name,email,role')
+            ->with(['ticketMessages' => function ($query) {
+                $query->orderBy('created_at', 'asc');
+            }])
+            ->get();
+
+        $byUser = $tickets->groupBy('user_id')->map(function ($userTickets, $userId) {
+            $user = $userTickets->first()->user;
+            $assigned = $userTickets->count();
+            $closed = $userTickets->whereIn('status', ['resolvido', 'finalizado'])->count();
+            $notResolved = $userTickets->whereNotIn('status', ['resolvido', 'finalizado'])->count();
+            $resolutionRate = $assigned > 0 ? round(($closed / $assigned) * 100, 2) : 0;
+
+            // Calcular tempo médio de resposta
+            $responseTimes = [];
+            foreach ($userTickets as $ticket) {
+                $firstMessage = $ticket->ticketMessages()
+                    ->where('user_id', $userId)
+                    ->where('is_internal', false)
+                    ->orderBy('created_at', 'asc')
+                    ->first();
+
+                if ($firstMessage) {
+                    $responseTimes[] = $ticket->created_at->diffInMinutes($firstMessage->created_at);
+                }
+            }
+
+            // Calcular tempo médio de resolução
+            $resolutionTimes = [];
+            foreach ($userTickets->whereIn('status', ['resolvido', 'finalizado']) as $ticket) {
+                if ($ticket->tempo_resolucao !== null) {
+                    $resolutionTimes[] = $ticket->tempo_resolucao;
+                } else {
+                    $resolutionTimes[] = $ticket->created_at->diffInMinutes($ticket->updated_at);
+                }
+            }
+
+            return [
+                'user_id' => $userId,
+                'user_name' => $user ? $user->name : 'N/A',
+                'user_email' => $user ? $user->email : 'N/A',
+                'user_role' => $user ? $user->role : 'N/A',
+                'tickets_assigned' => $assigned,
+                'tickets_closed' => $closed,
+                'tickets_not_resolved' => $notResolved,
+                'resolution_rate' => $resolutionRate,
+                'average_response_time_minutes' => count($responseTimes) > 0 ? round(array_sum($responseTimes) / count($responseTimes), 2) : 0,
+                'average_response_time_hours' => count($responseTimes) > 0 ? round((array_sum($responseTimes) / count($responseTimes)) / 60, 2) : 0,
+                'average_resolution_time_minutes' => count($resolutionTimes) > 0 ? round(array_sum($resolutionTimes) / count($resolutionTimes), 2) : 0,
+                'average_resolution_time_hours' => count($resolutionTimes) > 0 ? round((array_sum($resolutionTimes) / count($resolutionTimes)) / 60, 2) : 0,
+            ];
+        })->values();
+
+        return $byUser->sortByDesc('tickets_assigned')->values()->all();
+    }
+
+    /**
+     * 📥 Origens dos Tickets
+     * Gráfico mostrando por onde chegaram os tickets
+     */
+    private function getTicketsByOrigin($startDate)
+    {
+        $tickets = Ticket::where('created_at', '>=', $startDate)
+            ->select('origem', DB::raw('count(*) as total'))
+            ->groupBy('origem')
+            ->get();
+
+        $total = $tickets->sum('total');
+        $origins = [
+            'formulario_web' => 0,
+            'email' => 0,
+            'api' => 0,
+            'tel_manual' => 0,
+            'null' => 0,
+        ];
+
+        foreach ($tickets as $ticket) {
+            $key = $ticket->origem ?? 'null';
+            $origins[$key] = $ticket->total;
+        }
+
+        return [
+            'total' => $total,
+            'by_origin' => [
+                'formulario_web' => [
+                    'total' => $origins['formulario_web'],
+                    'percentage' => $total > 0 ? round(($origins['formulario_web'] / $total) * 100, 2) : 0,
+                ],
+                'email' => [
+                    'total' => $origins['email'],
+                    'percentage' => $total > 0 ? round(($origins['email'] / $total) * 100, 2) : 0,
+                ],
+                'api' => [
+                    'total' => $origins['api'],
+                    'percentage' => $total > 0 ? round(($origins['api'] / $total) * 100, 2) : 0,
+                ],
+                'tel_manual' => [
+                    'total' => $origins['tel_manual'],
+                    'percentage' => $total > 0 ? round(($origins['tel_manual'] / $total) * 100, 2) : 0,
+                ],
+                'null' => [
+                    'total' => $origins['null'],
+                    'percentage' => $total > 0 ? round(($origins['null'] / $total) * 100, 2) : 0,
+                ],
+            ],
+        ];
+    }
+
+    /**
+     * ✔️ Tickets criados por período
+     * Por dia, semana ou mês - mostra picos de atendimento
+     */
+    private function getTicketsCreatedByPeriod($startDate, $period)
+    {
+        $groupBy = match($period) {
+            'day' => DB::raw('DATE(created_at) as period'),
+            'week' => DB::raw('YEARWEEK(created_at) as period'),
+            'month' => DB::raw('DATE_FORMAT(created_at, "%Y-%m") as period'),
+            default => DB::raw('DATE(created_at) as period'),
+        };
+
+        return Ticket::where('created_at', '>=', $startDate)
+            ->select($groupBy, DB::raw('count(*) as total'))
+            ->groupBy('period')
+            ->orderBy('period', 'asc')
+            ->get()
+            ->map(function ($item) {
+                return [
+                    'period' => $item->period,
+                    'total' => $item->total,
+                ];
+            });
+    }
+
+    /**
+     * ✔️ Tickets fechados por período
+     * Quantos foram resolvidos e comparação abertos x fechados
+     */
+    private function getTicketsClosedByPeriod($startDate, $period)
+    {
+        $groupByCreated = match($period) {
+            'day' => DB::raw('DATE(created_at) as period'),
+            'week' => DB::raw('YEARWEEK(created_at) as period'),
+            'month' => DB::raw('DATE_FORMAT(created_at, "%Y-%m") as period'),
+            default => DB::raw('DATE(created_at) as period'),
+        };
+
+        $groupByClosed = match($period) {
+            'day' => DB::raw('DATE(updated_at) as period'),
+            'week' => DB::raw('YEARWEEK(updated_at) as period'),
+            'month' => DB::raw('DATE_FORMAT(updated_at, "%Y-%m") as period'),
+            default => DB::raw('DATE(updated_at) as period'),
+        };
+
+        $closed = Ticket::where('created_at', '>=', $startDate)
+            ->whereIn('status', ['resolvido', 'finalizado'])
+            ->select($groupByClosed, DB::raw('count(*) as closed'))
+            ->groupBy('period')
+            ->orderBy('period', 'asc')
+            ->get()
+            ->keyBy('period');
+
+        $created = Ticket::where('created_at', '>=', $startDate)
+            ->select($groupByCreated, DB::raw('count(*) as created'))
+            ->groupBy('period')
+            ->orderBy('period', 'asc')
+            ->get()
+            ->keyBy('period');
+
+        $periods = $created->keys()->merge($closed->keys())->unique()->sort();
+
+        return $periods->map(function ($period) use ($created, $closed) {
+            return [
+                'period' => $period,
+                'created' => $created->get($period)->created ?? 0,
+                'closed' => $closed->get($period)->closed ?? 0,
+                'open' => ($created->get($period)->created ?? 0) - ($closed->get($period)->closed ?? 0),
+            ];
+        })->values();
+    }
+
+    /**
+     * ✔️ Tickets por agente (detalhado)
+     * Quantos recebeu, respondeu e fechou
+     */
+    private function getTicketsByAgentDetailed($startDate)
+    {
+        $tickets = Ticket::where('created_at', '>=', $startDate)
+            ->whereNotNull('user_id')
+            ->with('user:id,name,email,role')
+            ->with('ticketMessages')
+            ->get();
+
+        $byUser = $tickets->groupBy('user_id')->map(function ($userTickets, $userId) {
+            $user = $userTickets->first()->user;
+            $received = $userTickets->count();
+            $responded = $userTickets->filter(function ($ticket) use ($userId) {
+                return $ticket->ticketMessages()->where('user_id', $userId)->exists();
+            })->count();
+            $closed = $userTickets->whereIn('status', ['resolvido', 'finalizado'])->count();
+            $notResolved = $userTickets->whereNotIn('status', ['resolvido', 'finalizado'])->count();
+
+            return [
+                'user_id' => $userId,
+                'user_name' => $user ? $user->name : 'N/A',
+                'user_email' => $user ? $user->email : 'N/A',
+                'user_role' => $user ? $user->role : 'N/A',
+                'tickets_received' => $received,
+                'tickets_responded' => $responded,
+                'tickets_closed' => $closed,
+                'tickets_not_resolved' => $notResolved,
+                'response_rate' => $received > 0 ? round(($responded / $received) * 100, 2) : 0,
+                'resolution_rate' => $received > 0 ? round(($closed / $received) * 100, 2) : 0,
+            ];
+        })->values();
+
+        return $byUser->sortByDesc('tickets_received')->values()->all();
     }
 }
 

@@ -64,7 +64,8 @@ class TicketController extends Controller
             'status' => 'required|nullable|in:aberto,pendente,resolvido,finalizado',
             'priority' => 'required|in:baixa,média,alta',
             'tempo_resolucao' => 'nullable|integer|min:0',
-            'resolvido_em' => 'nullable|date',
+            'prazo_resolucao' => 'nullable|date',
+            'origem' => 'nullable|in:formulario_web,email,api,tel_manual',
         ];
 
         // Admin e support podem definir cliente_id e user_id
@@ -87,7 +88,8 @@ class TicketController extends Controller
                 'user_id.exists' => 'O usuário não existe.',
                 'tempo_resolucao.integer' => 'O tempo de resolução deve ser um número inteiro.',
                 'tempo_resolucao.min' => 'O tempo de resolução não pode ser negativo.',
-                'resolvido_em.date' => 'A data de resolução deve ser uma data válida.',
+                'prazo_resolucao.date' => 'O prazo de resolução deve ser uma data válida.',
+                'origem.in' => 'A origem deve ser uma das seguintes: formulario_web, email, api, tel_manual.',
             ]
         );
 
@@ -154,6 +156,8 @@ class TicketController extends Controller
             'status' => 'nullable|in:aberto,pendente,resolvido,finalizado',
             'priority' => 'in:baixa,média,alta',
             'tempo_resolucao' => 'nullable|integer|min:0',
+            'prazo_resolucao' => 'nullable|date',
+            'origem' => 'nullable|in:formulario_web,email,api,tel_manual',
         ];
 
         // Admin e support podem alterar cliente_id e user_id
@@ -172,15 +176,31 @@ class TicketController extends Controller
                 'user_id.exists' => 'O usuário não existe.',
                 'tempo_resolucao.integer' => 'O tempo de resolução deve ser um número inteiro.',
                 'tempo_resolucao.min' => 'O tempo de resolução não pode ser negativo.',
-                'resolvido_em.date' => 'A data de resolução deve ser uma data válida.',
+                'prazo_resolucao.date' => 'O prazo de resolução deve ser uma data válida.',
+                'origem.in' => 'A origem deve ser uma das seguintes: formulario_web, email, api, tel_manual.',
             ]
         );
 
         // Verificar se user_id ou cliente_id foi alterado
         $oldUserId = $ticket->user_id;
         $oldClienteId = $ticket->cliente_id;
+        $oldStatus = $ticket->status;
+        $oldTempoResolucao = $ticket->tempo_resolucao;
 
         $ticket->fill($data);
+        
+        // Calcular tempo de resolução automaticamente quando status muda para resolvido/finalizado
+        $newStatus = isset($data['status']) ? $data['status'] : $ticket->status;
+        $isResolving = in_array($newStatus, ['resolvido', 'finalizado']) && 
+                       !in_array($oldStatus, ['resolvido', 'finalizado']);
+        
+        // Se está resolvendo e não foi fornecido tempo_resolucao manualmente e não tinha antes
+        if ($isResolving && !isset($data['tempo_resolucao']) && $oldTempoResolucao === null) {
+            // Calcular tempo em minutos entre criação e agora
+            $tempoEmMinutos = $ticket->created_at->diffInMinutes(now());
+            $ticket->tempo_resolucao = $tempoEmMinutos;
+        }
+        
         $ticket->save();
 
         // Enviar notificações se user_id ou cliente_id foi alterado
