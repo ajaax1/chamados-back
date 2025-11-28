@@ -93,6 +93,9 @@ Route::middleware('auth:sanctum')->group(function () {
     Route::post('notifications/read-all', [NotificationController::class, 'markAllAsRead']);
     Route::delete('notifications/{id}', [NotificationController::class, 'destroy']);
 
+    // Statistics - Estatísticas pessoais (qualquer usuário autenticado)
+    Route::get('statistics/my-stats', [StatisticsController::class, 'myStats']);
+
     // Statistics - Estatísticas para administradores
     Route::prefix('admin/statistics')->middleware('role:admin')->group(function () {
         Route::get('dashboard', [StatisticsController::class, 'dashboard']);
@@ -100,7 +103,6 @@ Route::middleware('auth:sanctum')->group(function () {
         Route::get('users', [StatisticsController::class, 'users']);
         Route::get('messages', [StatisticsController::class, 'messages']);
         Route::get('attachments', [StatisticsController::class, 'attachments']);
-        Route::get('trends', [StatisticsController::class, 'trends']);
     });
 
 });
