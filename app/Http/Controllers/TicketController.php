@@ -6,6 +6,7 @@ use Illuminate\Http\Request;
 use App\Models\Ticket;
 use App\Models\User;
 use App\Notifications\TicketAssignedNotification;
+use App\Helpers\ActivityLogger;
 
 class TicketController extends Controller
 {
@@ -105,6 +106,14 @@ class TicketController extends Controller
 
         $ticket = Ticket::create($data);
 
+        // Registrar log de criação
+        ActivityLogger::created($ticket, "Ticket '{$ticket->title}' criado", [
+            'cliente_id' => $ticket->cliente_id,
+            'assigned_to' => $ticket->user_id,
+            'status' => $ticket->status,
+            'priority' => $ticket->priority,
+        ]);
+
         // Enviar notificações quando um ticket é criado
         $this->sendTicketNotifications($ticket, null);
 
@@ -124,6 +133,13 @@ class TicketController extends Controller
         // Verificar permissão para ver o ticket
         if (!$user->canViewTicket($ticket)) {
             return response()->json(['message' => 'Acesso negado. Você não tem permissão para ver este chamado.'], 403);
+        }
+
+        // Registrar log de visualização (apenas uma vez por sessão para evitar spam)
+        $sessionKey = "ticket_viewed_{$ticket->id}";
+        if (!session()->has($sessionKey)) {
+            ActivityLogger::viewed($ticket, "Ticket '{$ticket->title}' visualizado");
+            session()->put($sessionKey, true);
         }
 
         return response()->json($ticket->load('user', 'cliente', 'messages', 'attachments'));
@@ -186,6 +202,7 @@ class TicketController extends Controller
         $oldClienteId = $ticket->cliente_id;
         $oldStatus = $ticket->status;
         $oldTempoResolucao = $ticket->tempo_resolucao;
+        $oldValues = $ticket->getAttributes();
 
         $ticket->fill($data);
         
@@ -202,6 +219,27 @@ class TicketController extends Controller
         }
         
         $ticket->save();
+
+        // Registrar log de atualização
+        $description = "Ticket '{$ticket->title}' atualizado";
+        $metadata = [];
+        
+        // Log específico para mudança de status
+        if (isset($data['status']) && $oldStatus !== $ticket->status) {
+            ActivityLogger::statusChanged($ticket, $oldStatus, $ticket->status, 
+                "Status do ticket '{$ticket->title}' alterado de '{$oldStatus}' para '{$ticket->status}'");
+        }
+        
+        // Log específico para atribuição
+        if (isset($data['user_id']) && $oldUserId !== $ticket->user_id) {
+            ActivityLogger::assigned($ticket, $ticket->user_id, 
+                "Ticket '{$ticket->title}' atribuído ao usuário ID: {$ticket->user_id}");
+            $metadata['assigned_to'] = $ticket->user_id;
+            $metadata['old_assigned_to'] = $oldUserId;
+        }
+        
+        // Log geral de atualização
+        ActivityLogger::updated($ticket, $oldValues, $description, $metadata);
 
         // Enviar notificações se user_id ou cliente_id foi alterado
         if ($oldUserId !== $ticket->user_id || $oldClienteId !== $ticket->cliente_id) {
@@ -234,6 +272,13 @@ class TicketController extends Controller
         if (!$user->canDeleteTickets() && $ticket->user_id !== $user->id) {
             return response()->json(['message' => 'Acesso negado. Você só pode deletar seus próprios tickets.'], 403);
         }
+
+        // Registrar log de deleção antes de deletar
+        ActivityLogger::deleted($ticket, "Ticket '{$ticket->title}' deletado", [
+            'ticket_id' => $ticket->id,
+            'status' => $ticket->status,
+            'priority' => $ticket->priority,
+        ]);
 
         $ticket->delete();
         return response()->json(['message' => 'Chamado excluído']);

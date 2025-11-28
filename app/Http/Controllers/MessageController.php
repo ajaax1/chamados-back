@@ -10,6 +10,7 @@ use App\Models\WhatsappMessage;
 use App\Models\TicketMessage;
 use App\Models\MessageAttachment;
 use App\Notifications\TicketMessageNotification;
+use App\Helpers\ActivityLogger;
 
 class MessageController extends Controller
 {
@@ -183,6 +184,24 @@ class MessageController extends Controller
         // Recarregar mensagem com relacionamentos após salvar anexos
         $message->refresh();
         $message->load(['user:id,name,email,role', 'attachments']);
+
+        // Registrar log de criação de mensagem
+        $messageType = $message->is_internal ? 'interna' : 'pública';
+        ActivityLogger::created($message, "Mensagem {$messageType} enviada no ticket '{$ticket->title}'", [
+            'ticket_id' => $ticket->id,
+            'is_internal' => $message->is_internal,
+            'attachments_count' => count($attachments),
+        ]);
+
+        // Registrar log para cada anexo criado
+        foreach ($attachments as $attachment) {
+            ActivityLogger::created($attachment, "Anexo '{$attachment->nome_arquivo}' adicionado à mensagem", [
+                'ticket_id' => $ticket->id,
+                'message_id' => $message->id,
+                'file_size' => $attachment->tamanho,
+                'file_type' => $attachment->tipo_mime,
+            ]);
+        }
 
         // Enviar notificação por email para o outro participante (em background para não bloquear resposta)
         try {

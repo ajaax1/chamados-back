@@ -10,6 +10,7 @@ use App\Http\Controllers\PasswordResetController;
 use App\Http\Controllers\AttachmentController;
 use App\Http\Controllers\NotificationController;
 use App\Http\Controllers\StatisticsController;
+use App\Http\Controllers\ActivityLogController;
 
 /*
 |--------------------------------------------------------------------------
@@ -95,9 +96,19 @@ Route::middleware('auth:sanctum')->group(function () {
 
     // Statistics - Estatísticas pessoais (qualquer usuário autenticado)
     Route::get('statistics/my-stats', [StatisticsController::class, 'myStats']);
+    Route::get('statistics/my-activity', [StatisticsController::class, 'myActivity']);
+
+    // Activity Logs - Logs de atividades do sistema
+    Route::get('activity-logs', [ActivityLogController::class, 'index']);
+    Route::get('activity-logs/stats', [ActivityLogController::class, 'stats']);
+    Route::get('activity-logs/{id}', [ActivityLogController::class, 'show']);
+    Route::get('activity-logs/user/{userId}', [ActivityLogController::class, 'userLogs']);
+    Route::get('activity-logs/ticket/{ticketId}', [ActivityLogController::class, 'ticketLogs']);
 
     // Statistics - Estatísticas para administradores
     Route::prefix('admin/statistics')->middleware('role:admin')->group(function () {
+        Route::get('my-stats', [StatisticsController::class, 'adminMyStats']);
+        Route::get('compare-performance', [StatisticsController::class, 'comparePerformance']);
         Route::get('dashboard', [StatisticsController::class, 'dashboard']);
         Route::get('tickets', [StatisticsController::class, 'tickets']);
         Route::get('users', [StatisticsController::class, 'users']);

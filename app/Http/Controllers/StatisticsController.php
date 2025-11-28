@@ -128,6 +128,87 @@ class StatisticsController extends Controller
     }
 
     /**
+     * Estatísticas pessoais do administrador logado
+     * GET /api/admin/statistics/my-stats
+     */
+    public function adminMyStats(Request $request)
+    {
+        $user = $request->user();
+
+        if (!$user->isAdmin()) {
+            return response()->json(['message' => 'Acesso negado. Apenas administradores podem acessar.'], 403);
+        }
+
+        $period = $request->query('period', 'month');
+        $startDate = $this->getStartDate($period);
+
+        return response()->json([
+            'period' => $period,
+            'start_date' => $startDate,
+            'user' => [
+                'id' => $user->id,
+                'name' => $user->name,
+                'email' => $user->email,
+                'role' => $user->role,
+            ],
+            'overview' => $this->getMyTicketsStats($user->id, $startDate),
+            'by_status' => $this->getMyTicketsByStatus($user->id, $startDate),
+            'by_priority' => $this->getMyTicketsByPriority($user->id, $startDate),
+            'by_day' => $this->getMyTicketsByDay($user->id, $startDate),
+            'response_time' => $this->getMyResponseTimeStats($user->id, $startDate),
+            'productivity' => $this->getMyProductivity($user->id, $startDate),
+            'tickets_by_origin' => $this->getMyTicketsByOrigin($user->id, $startDate),
+            'tickets_created_by_period' => $this->getMyTicketsCreatedByPeriod($user->id, $startDate, $period),
+            'tickets_closed_by_period' => $this->getMyTicketsClosedByPeriod($user->id, $startDate, $period),
+        ]);
+    }
+
+    /**
+     * Comparar performance do admin com a média dos outros usuários
+     * GET /api/admin/statistics/compare-performance
+     */
+    public function comparePerformance(Request $request)
+    {
+        $user = $request->user();
+
+        if (!$user->isAdmin()) {
+            return response()->json(['message' => 'Acesso negado. Apenas administradores podem acessar.'], 403);
+        }
+
+        $period = $request->query('period', 'month');
+        $startDate = $this->getStartDate($period);
+
+        // Estatísticas pessoais do admin
+        $myProductivity = $this->getMyProductivity($user->id, $startDate);
+        $myResponseTime = $this->getMyResponseTimeStats($user->id, $startDate);
+        $myOverview = $this->getMyTicketsStats($user->id, $startDate);
+
+        // Média dos outros usuários (excluindo o admin atual)
+        $averageStats = $this->getAveragePerformanceExcludingUser($user->id, $startDate);
+
+        // Calcular comparações
+        $comparison = $this->calculateComparison($myProductivity, $myResponseTime, $myOverview, $averageStats);
+
+        return response()->json([
+            'period' => $period,
+            'start_date' => $startDate,
+            'user' => [
+                'id' => $user->id,
+                'name' => $user->name,
+                'email' => $user->email,
+                'role' => $user->role,
+            ],
+            'my_performance' => [
+                'productivity' => $myProductivity,
+                'response_time' => $myResponseTime,
+                'overview' => $myOverview,
+            ],
+            'average_others' => $averageStats,
+            'comparison' => $comparison,
+        ]);
+    }
+
+    /**
      * Estatísticas de anexos
      * GET /api/admin/statistics/attachments
      */
@@ -964,6 +1045,106 @@ class StatisticsController extends Controller
         ]);
     }
 
+    /**
+     * Histórico de atividades do usuário logado
+     * GET /api/statistics/my-activity
+     */
+    public function myActivity(Request $request)
+    {
+        $user = $request->user();
+        $period = $request->query('period', 'month');
+        $limit = (int) $request->query('limit', 50);
+        $startDate = $this->getStartDate($period);
+
+        // Buscar atividades
+        $ticketsCreated = $this->getMyTicketsCreatedActivity($user->id, $startDate);
+        $ticketsUpdated = $this->getMyTicketsUpdatedActivity($user->id, $startDate);
+        $messagesSent = $this->getMyMessagesSentActivity($user->id, $startDate);
+        $attachmentsUploaded = $this->getMyAttachmentsUploadedActivity($user->id, $startDate);
+
+        // Criar timeline combinada
+        $timeline = collect();
+
+        // Adicionar tickets criados
+        foreach ($ticketsCreated as $ticket) {
+            $timeline->push([
+                'type' => 'ticket_created',
+                'id' => $ticket['id'],
+                'title' => $ticket['title'],
+                'description' => "Ticket criado: {$ticket['title']}",
+                'status' => $ticket['status'],
+                'priority' => $ticket['priority'],
+                'created_at' => $ticket['created_at'],
+            ]);
+        }
+
+        // Adicionar tickets atualizados
+        foreach ($ticketsUpdated as $ticket) {
+            $timeline->push([
+                'type' => 'ticket_updated',
+                'id' => $ticket['id'],
+                'title' => $ticket['title'],
+                'description' => "Ticket atualizado: {$ticket['title']}",
+                'status' => $ticket['status'],
+                'priority' => $ticket['priority'],
+                'created_at' => $ticket['updated_at'],
+            ]);
+        }
+
+        // Adicionar mensagens enviadas
+        foreach ($messagesSent as $message) {
+            $timeline->push([
+                'type' => 'message_sent',
+                'id' => $message['id'],
+                'ticket_id' => $message['ticket_id'],
+                'ticket_title' => $message['ticket_title'],
+                'description' => 'Mensagem enviada',
+                'message_preview' => substr($message['message'], 0, 100) . (strlen($message['message']) > 100 ? '...' : ''),
+                'is_internal' => $message['is_internal'],
+                'created_at' => $message['created_at'],
+            ]);
+        }
+
+        // Adicionar anexos enviados
+        foreach ($attachmentsUploaded as $attachment) {
+            $timeline->push([
+                'type' => 'attachment_uploaded',
+                'id' => $attachment['id'],
+                'ticket_id' => $attachment['ticket_id'],
+                'ticket_title' => $attachment['ticket_title'],
+                'description' => "Anexo enviado: {$attachment['file_name']}",
+                'file_name' => $attachment['file_name'],
+                'file_size' => $attachment['file_size'],
+                'created_at' => $attachment['created_at'],
+            ]);
+        }
+
+        // Ordenar por data (mais recente primeiro) e limitar
+        $timeline = $timeline->sortByDesc('created_at')->take($limit)->values();
+
+        return response()->json([
+            'period' => $period,
+            'start_date' => $startDate,
+            'user' => [
+                'id' => $user->id,
+                'name' => $user->name,
+                'email' => $user->email,
+                'role' => $user->role,
+            ],
+            'summary' => [
+                'tickets_created' => count($ticketsCreated),
+                'tickets_updated' => count($ticketsUpdated),
+                'messages_sent' => count($messagesSent),
+                'attachments_uploaded' => count($attachmentsUploaded),
+            ],
+            'timeline' => $timeline,
+            'tickets_created' => $ticketsCreated,
+            'tickets_updated' => $ticketsUpdated,
+            'messages_sent' => $messagesSent,
+            'attachments_uploaded' => $attachmentsUploaded,
+        ]);
+    }
+
     // ========== MÉTODOS PRIVADOS PARA ESTATÍSTICAS PESSOAIS ==========
 
     private function getMyTicketsStats($userId, $startDate)
@@ -1252,6 +1433,357 @@ class StatisticsController extends Controller
                 'open' => ($created->get($period)->created ?? 0) - ($closed->get($period)->closed ?? 0),
             ];
         })->values();
+    }
+
+    // ========== MÉTODOS PRIVADOS PARA COMPARAÇÃO DE PERFORMANCE ==========
+
+    /**
+     * Calcula a média de performance de todos os usuários excluindo um usuário específico
+     */
+    private function getAveragePerformanceExcludingUser($excludeUserId, $startDate)
+    {
+        // Pegar produtividade de todos os agentes
+        $allProductivity = $this->getAgentProductivity($startDate);
+        
+        // Filtrar excluindo o usuário atual
+        $othersProductivity = collect($allProductivity)
+            ->filter(function ($agent) use ($excludeUserId) {
+                return $agent['user_id'] != $excludeUserId;
+            })
+            ->values();
+
+        if ($othersProductivity->isEmpty()) {
+            return [
+                'productivity' => [
+                    'tickets_assigned' => 0,
+                    'tickets_closed' => 0,
+                    'tickets_not_resolved' => 0,
+                    'tickets_responded' => 0,
+                    'resolution_rate' => 0,
+                    'response_rate' => 0,
+                    'average_response_time_minutes' => 0,
+                    'average_response_time_hours' => 0,
+                    'average_resolution_time_minutes' => 0,
+                    'average_resolution_time_hours' => 0,
+                ],
+                'response_time' => [
+                    'first_response' => [
+                        'average_minutes' => 0,
+                        'average_hours' => 0,
+                    ],
+                    'resolution_time' => [
+                        'average_minutes' => 0,
+                        'average_hours' => 0,
+                    ],
+                ],
+                'overview' => [
+                    'total' => 0,
+                    'resolvidos' => 0,
+                    'finalizados' => 0,
+                ],
+                'total_users' => 0,
+            ];
+        }
+
+        // Calcular médias
+        $totalUsers = $othersProductivity->count();
+        
+        $avgTicketsAssigned = $othersProductivity->avg('tickets_assigned') ?? 0;
+        $avgTicketsClosed = $othersProductivity->avg('tickets_closed') ?? 0;
+        $avgTicketsNotResolved = $othersProductivity->avg('tickets_not_resolved') ?? 0;
+        $avgResolutionRate = $othersProductivity->avg('resolution_rate') ?? 0;
+        $avgResponseTimeMinutes = $othersProductivity->where('average_response_time_minutes', '>', 0)->avg('average_response_time_minutes') ?? 0;
+        $avgResolutionTimeMinutes = $othersProductivity->where('average_resolution_time_minutes', '>', 0)->avg('average_resolution_time_minutes') ?? 0;
+
+        // Pegar tickets detalhados para calcular response_rate
+        $allDetailed = $this->getTicketsByAgentDetailed($startDate);
+        $othersDetailed = collect($allDetailed)
+            ->filter(function ($agent) use ($excludeUserId) {
+                return $agent['user_id'] != $excludeUserId;
+            })
+            ->values();
+
+        $avgTicketsResponded = $othersDetailed->avg('tickets_responded') ?? 0;
+        $avgTicketsReceived = $othersDetailed->avg('tickets_received') ?? 0;
+        $avgResponseRate = $othersDetailed->avg('response_rate') ?? 0;
+
+        // Calcular tempos de resposta médios (usando dados de todos os tickets)
+        $allTickets = Ticket::where('created_at', '>=', $startDate)
+            ->whereNotNull('user_id')
+            ->where('user_id', '!=', $excludeUserId)
+            ->with(['ticketMessages' => function ($query) {
+                $query->orderBy('created_at', 'asc');
+            }])
+            ->get();
+
+        $firstResponseTimes = [];
+        $resolutionTimes = [];
+
+        foreach ($allTickets as $ticket) {
+            $firstMessage = $ticket->ticketMessages()
+                ->where('is_internal', false)
+                ->orderBy('created_at', 'asc')
+                ->first();
+
+            if ($firstMessage) {
+                $firstResponseTimes[] = $ticket->created_at->diffInMinutes($firstMessage->created_at);
+            }
+
+            if (in_array($ticket->status, ['resolvido', 'finalizado'])) {
+                if ($ticket->tempo_resolucao !== null) {
+                    $resolutionTimes[] = $ticket->tempo_resolucao;
+                } else {
+                    $resolutionTimes[] = $ticket->created_at->diffInMinutes($ticket->updated_at);
+                }
+            }
+        }
+
+        $avgFirstResponseMinutes = count($firstResponseTimes) > 0 ? round(array_sum($firstResponseTimes) / count($firstResponseTimes), 2) : 0;
+        $avgResolutionMinutes = count($resolutionTimes) > 0 ? round(array_sum($resolutionTimes) / count($resolutionTimes), 2) : 0;
+
+        // Overview médio
+        $totalTickets = Ticket::where('created_at', '>=', $startDate)
+            ->whereNotNull('user_id')
+            ->where('user_id', '!=', $excludeUserId)
+            ->count();
+
+        $resolvedTickets = Ticket::where('created_at', '>=', $startDate)
+            ->whereNotNull('user_id')
+            ->where('user_id', '!=', $excludeUserId)
+            ->whereIn('status', ['resolvido', 'finalizado'])
+            ->count();
+
+        return [
+            'productivity' => [
+                'tickets_assigned' => round($avgTicketsAssigned, 2),
+                'tickets_closed' => round($avgTicketsClosed, 2),
+                'tickets_not_resolved' => round($avgTicketsNotResolved, 2),
+                'tickets_responded' => round($avgTicketsResponded, 2),
+                'resolution_rate' => round($avgResolutionRate, 2),
+                'response_rate' => round($avgResponseRate, 2),
+                'average_response_time_minutes' => round($avgResponseTimeMinutes, 2),
+                'average_response_time_hours' => round($avgResponseTimeMinutes / 60, 2),
+                'average_resolution_time_minutes' => round($avgResolutionTimeMinutes, 2),
+                'average_resolution_time_hours' => round($avgResolutionTimeMinutes / 60, 2),
+            ],
+            'response_time' => [
+                'first_response' => [
+                    'average_minutes' => $avgFirstResponseMinutes,
+                    'average_hours' => round($avgFirstResponseMinutes / 60, 2),
+                ],
+                'resolution_time' => [
+                    'average_minutes' => $avgResolutionMinutes,
+                    'average_hours' => round($avgResolutionMinutes / 60, 2),
+                ],
+            ],
+            'overview' => [
+                'total' => $totalTickets,
+                'resolvidos' => $resolvedTickets,
+                'finalizados' => Ticket::where('created_at', '>=', $startDate)
+                    ->whereNotNull('user_id')
+                    ->where('user_id', '!=', $excludeUserId)
+                    ->where('status', 'finalizado')
+                    ->count(),
+            ],
+            'total_users' => $totalUsers,
+        ];
+    }
+
+    /**
+     * Busca tickets criados pelo usuário
+     */
+    private function getMyTicketsCreatedActivity($userId, $startDate)
+    {
+        return Ticket::where('user_id', $userId)
+            ->where('created_at', '>=', $startDate)
+            ->select('id', 'title', 'status', 'priority', 'created_at', 'updated_at')
+            ->orderBy('created_at', 'desc')
+            ->get()
+            ->map(function ($ticket) {
+                return [
+                    'id' => $ticket->id,
+                    'title' => $ticket->title,
+                    'status' => $ticket->status,
+                    'priority' => $ticket->priority,
+                    'created_at' => $ticket->created_at->toIso8601String(),
+                    'updated_at' => $ticket->updated_at->toIso8601String(),
+                ];
+            })
+            ->toArray();
+    }
+
+    /**
+     * Busca tickets atualizados pelo usuário (tickets atribuídos que foram modificados)
+     */
+    private function getMyTicketsUpdatedActivity($userId, $startDate)
+    {
+        return Ticket::where('user_id', $userId)
+            ->where('updated_at', '>=', $startDate)
+            ->whereColumn('updated_at', '>', 'created_at') // Apenas atualizações, não criações
+            ->select('id', 'title', 'status', 'priority', 'created_at', 'updated_at')
+            ->orderBy('updated_at', 'desc')
+            ->get()
+            ->map(function ($ticket) {
+                return [
+                    'id' => $ticket->id,
+                    'title' => $ticket->title,
+                    'status' => $ticket->status,
+                    'priority' => $ticket->priority,
+                    'created_at' => $ticket->created_at->toIso8601String(),
+                    'updated_at' => $ticket->updated_at->toIso8601String(),
+                ];
+            })
+            ->toArray();
+    }
+
+    /**
+     * Busca mensagens enviadas pelo usuário
+     */
+    private function getMyMessagesSentActivity($userId, $startDate)
+    {
+        return TicketMessage::where('user_id', $userId)
+            ->where('created_at', '>=', $startDate)
+            ->with('ticket:id,title')
+            ->orderBy('created_at', 'desc')
+            ->get()
+            ->map(function ($message) {
+                return [
+                    'id' => $message->id,
+                    'ticket_id' => $message->ticket_id,
+                    'ticket_title' => $message->ticket->title ?? 'N/A',
+                    'message' => $message->message,
+                    'is_internal' => $message->is_internal,
+                    'created_at' => $message->created_at->toIso8601String(),
+                ];
+            })
+            ->toArray();
+    }
+
+    /**
+     * Busca anexos enviados pelo usuário (através de tickets e mensagens)
+     */
+    private function getMyAttachmentsUploadedActivity($userId, $startDate)
+    {
+        // Anexos de tickets atribuídos ao usuário
+        $ticketAttachments = TicketAttachment::whereHas('ticket', function ($query) use ($userId) {
+            $query->where('user_id', $userId);
+        })
+        ->where('created_at', '>=', $startDate)
+        ->with('ticket:id,title')
+        ->get()
+        ->map(function ($attachment) {
+            return [
+                'id' => $attachment->id,
+                'type' => 'ticket_attachment',
+                'ticket_id' => $attachment->ticket_id,
+                'ticket_title' => $attachment->ticket->title ?? 'N/A',
+                'file_name' => $attachment->nome_arquivo,
+                'file_type' => $attachment->tipo_mime,
+                'file_size' => $attachment->tamanho,
+                'created_at' => $attachment->created_at->toIso8601String(),
+            ];
+        });
+
+        // Anexos de mensagens enviadas pelo usuário
+        $messageAttachments = MessageAttachment::whereHas('ticketMessage', function ($query) use ($userId) {
+            $query->where('user_id', $userId);
+        })
+        ->where('created_at', '>=', $startDate)
+        ->with(['ticketMessage' => function ($query) {
+            $query->with('ticket:id,title');
+        }])
+        ->get()
+        ->map(function ($attachment) {
+            $ticketId = $attachment->ticketMessage->ticket_id ?? null;
+            $ticketTitle = $attachment->ticketMessage->ticket->title ?? 'N/A';
+            
+            return [
+                'id' => $attachment->id,
+                'type' => 'message_attachment',
+                'ticket_id' => $ticketId,
+                'ticket_title' => $ticketTitle,
+                'file_name' => $attachment->nome_arquivo,
+                'file_type' => $attachment->tipo_mime,
+                'file_size' => $attachment->tamanho,
+                'created_at' => $attachment->created_at->toIso8601String(),
+            ];
+        });
+
+        return collect($ticketAttachments)
+            ->merge($messageAttachments)
+            ->sortByDesc('created_at')
+            ->values()
+            ->toArray();
+    }
+
+    /**
+     * Calcula a comparação entre performance pessoal e média dos outros
+     */
+    private function calculateComparison($myProductivity, $myResponseTime, $myOverview, $averageStats)
+    {
+        $calculateDifference = function($myValue, $avgValue) {
+            if ($avgValue == 0) {
+                return $myValue > 0 ? 100 : 0;
+            }
+            return round((($myValue - $avgValue) / $avgValue) * 100, 2);
+        };
+
+        $calculateStatus = function($difference, $higherIsBetter = true) {
+            if ($higherIsBetter) {
+                if ($difference > 10) return 'better';
+                if ($difference < -10) return 'worse';
+                return 'similar';
+            } else {
+                if ($difference < -10) return 'better';
+                if ($difference > 10) return 'worse';
+                return 'similar';
+            }
+        };
+
+        return [
+            'tickets_assigned' => [
+                'my_value' => $myProductivity['tickets_assigned'],
+                'average_value' => $averageStats['productivity']['tickets_assigned'],
+                'difference_percent' => $calculateDifference($myProductivity['tickets_assigned'], $averageStats['productivity']['tickets_assigned']),
+                'status' => $calculateStatus($calculateDifference($myProductivity['tickets_assigned'], $averageStats['productivity']['tickets_assigned'])),
+            ],
+            'tickets_closed' => [
+                'my_value' => $myProductivity['tickets_closed'],
+                'average_value' => $averageStats['productivity']['tickets_closed'],
+                'difference_percent' => $calculateDifference($myProductivity['tickets_closed'], $averageStats['productivity']['tickets_closed']),
+                'status' => $calculateStatus($calculateDifference($myProductivity['tickets_closed'], $averageStats['productivity']['tickets_closed'])),
+            ],
+            'resolution_rate' => [
+                'my_value' => $myProductivity['resolution_rate'],
+                'average_value' => $averageStats['productivity']['resolution_rate'],
+                'difference_percent' => $calculateDifference($myProductivity['resolution_rate'], $averageStats['productivity']['resolution_rate']),
+                'status' => $calculateStatus($calculateDifference($myProductivity['resolution_rate'], $averageStats['productivity']['resolution_rate'])),
+            ],
+            'response_rate' => [
+                'my_value' => $myProductivity['response_rate'],
+                'average_value' => $averageStats['productivity']['response_rate'],
+                'difference_percent' => $calculateDifference($myProductivity['response_rate'], $averageStats['productivity']['response_rate']),
+                'status' => $calculateStatus($calculateDifference($myProductivity['response_rate'], $averageStats['productivity']['response_rate'])),
+            ],
+            'average_response_time' => [
+                'my_value' => $myProductivity['average_response_time_hours'],
+                'average_value' => $averageStats['productivity']['average_response_time_hours'],
+                'difference_percent' => $calculateDifference($myProductivity['average_response_time_hours'], $averageStats['productivity']['average_response_time_hours']),
+                'status' => $calculateStatus($calculateDifference($myProductivity['average_response_time_hours'], $averageStats['productivity']['average_response_time_hours']), false), // menor é melhor
+            ],
+            'average_resolution_time' => [
+                'my_value' => $myProductivity['average_resolution_time_hours'],
+                'average_value' => $averageStats['productivity']['average_resolution_time_hours'],
+                'difference_percent' => $calculateDifference($myProductivity['average_resolution_time_hours'], $averageStats['productivity']['average_resolution_time_hours']),
+                'status' => $calculateStatus($calculateDifference($myProductivity['average_resolution_time_hours'], $averageStats['productivity']['average_resolution_time_hours']), false), // menor é melhor
+            ],
+            'first_response_time' => [
+                'my_value' => $myResponseTime['first_response']['average_hours'],
+                'average_value' => $averageStats['response_time']['first_response']['average_hours'],
+                'difference_percent' => $calculateDifference($myResponseTime['first_response']['average_hours'], $averageStats['response_time']['first_response']['average_hours']),
+                'status' => $calculateStatus($calculateDifference($myResponseTime['first_response']['average_hours'], $averageStats['response_time']['first_response']['average_hours']), false), // menor é melhor
+            ],
+        ];
     }
 }
 
